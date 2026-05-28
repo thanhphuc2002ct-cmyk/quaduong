@@ -1,0 +1,156 @@
+// dò line cộng gặp ngướng ngại vật ngưng lại. mất line quay đầu tìm line.
+
+#include <Arduino.h>
+#include "config.h"
+#include "motor.h"
+#include "master.h"
+
+// --- Cấu hình Cảm biến siêu âm HC-SR04 ---
+#define TRIG_PIN 13
+#define ECHO_PIN 12
+
+Master comm; 
+unsigned long lastI2CPoll = 0; 
+unsigned long lastSonarPoll = 0;
+long currentDistance = 999;
+
+// --- MÁY TRẠNG THÁI: DÒ LINE, QUAY ĐẦU & TRÁNH VẬT CẢN ---
+enum State { FOLLOW, UTURN, OBSTACLE };
+State currentState = FOLLOW;
+
+// Hàm đo khoảng cách HC-SR04
+long getDistance() {
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    
+    // Timeout 20ms (~3.4 mét) để vòng lặp loop() không bị treo
+    long duration = pulseIn(ECHO_PIN, HIGH, 20000); 
+    if (duration == 0) return 999;
+    return duration * 0.034 / 2;
+}
+
+void setup() {
+    Serial.begin(115200);
+    comm.beginI2C(SDA_PIN, SCL_PIN);
+    motorInit();
+    
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+
+    Serial.println("KHOI DONG: Do line (Toc do cu) + Quay dau + Tranh vat can SR04");
+}
+
+void loop() {
+    unsigned long currentMillis = millis();
+
+    // --- 1. ĐỌC CẢM BIẾN SIÊU ÂM (Mỗi 50ms) ---
+    if (currentMillis - lastSonarPoll >= 50) {
+        currentDistance = getDistance();
+        lastSonarPoll = currentMillis;
+    }
+
+    // --- 2. ĐỌC CẢM BIẾN LINE (Mỗi 10ms) ---
+    if (currentMillis - lastI2CPoll < 10) return;
+    lastI2CPoll = currentMillis;
+
+    uint8_t raw_val = 255; 
+    comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
+    if (raw_val == 255) return; 
+
+    uint8_t val = raw_val & 0x1F; 
+
+    // LUÔN LUÔN IN RA MÀN HÌNH ĐỂ KHÔNG BAO GIỜ BỊ ĐƠ NỮA
+    Serial.printf("Khoang cach: %ld cm | Line: %d\n", currentDistance, val);
+
+    // --- 3. XỬ LÝ VẬT CẢN (Ưu tiên số 1) ---
+    if (currentDistance > 0 && currentDistance <= 10) {
+        setMotors(0, 0); // PHANH KHẨN CẤP
+        currentState = OBSTACLE;
+        // Đã xóa bỏ return; ở đây
+    } 
+    else {
+        // Nếu không có vật cản (hoặc đã rút vật cản ra)
+        if (currentState == OBSTACLE) {
+            currentState = FOLLOW;
+            Serial.println("Duong thoang -> DI TIEP!");
+        }
+
+        // --- 4. XỬ LÝ MẤT LINE (Nền trắng 0b11111 = 31) ---
+        if (val == 31 && currentState == FOLLOW) {
+            currentState = UTURN;
+            Serial.println("Mat line -> QUAY DAU TIM LAI VACH!");
+        }
+
+        if (currentState == UTURN) {
+            // Quay compa tại chỗ với tốc độ phù hợp
+            setMotors(80, -80); 
+            
+            // Xoay liên tục cho đến khi 1 trong 5 mắt đọc nhìn thấy vạch đen (Khác 31)
+            if (val != 31) { 
+                currentState = FOLLOW; 
+                Serial.println("Da bat lai duoc line -> DI TIEP!");
+            }
+        } 
+        // --- 5. XỬ LÝ BÁM LINE ---
+        // else if (currentState == FOLLOW) {
+        //     switch (val) {
+        //         // --- NHÓM ĐI THẲNG ---
+        //         case 27: case 17: case 0:
+        //             setMotors(60, 55); 
+        //             break;
+
+        /*        // --- NHÓM LỆCH TRÁI (Ôm cua Trái) ---
+                case 19: setMotors(40, 65); break;
+                case 23: setMotors(20, 85); break;
+                case 7:  setMotors(0, 105); break;
+                case 15: setMotors(-30, 125); break;
+                case 3:  setMotors(-50, 145); break;
+                case 1:  setMotors(-70, 155); break;
+
+                // --- NHÓM LỆCH PHẢI (Ôm cua Phải) ---
+                case 25: setMotors(70, 35); break;
+                case 29: setMotors(90, 15); break;
+                case 28: setMotors(110, -5); break;
+                case 30: setMotors(130, -35); break;
+                case 24: setMotors(150, -55); break;
+                case 16: setMotors(160, -75); break;
+                
+                default:
+                    setMotors(60, 55); 
+                    break;
+            }*/
+        
+    else if (currentState == FOLLOW) {
+            switch (val) {
+                // --- NHÓM ĐI THẲNG ---
+                case 27: case 17: case 0:
+                    setMotors(70, 65); 
+                    break;
+
+                // --- NHÓM LỆCH TRÁI (Ôm cua Trái) ---
+                case 19: setMotors(65, 70); break; 
+                case 23: setMotors(45, 70); break; 
+                case 7:  setMotors(20, 95); break; 
+                case 15: setMotors(-30, 105); break; 
+                case 3:  setMotors(-50, 125); break;
+                case 1:  setMotors(-70, 135); break; 
+
+                // --- NHÓM LỆCH PHẢI (Ôm cua Phải) ---
+                case 25: setMotors(75, 60); break; 
+                case 29: setMotors(75, 40); break; 
+                case 28: setMotors(100, 15); break; 
+                case 30: setMotors(110, -35); break; 
+                case 24: setMotors(130, -55); break; 
+                case 16: setMotors(140, -75); break; 
+                
+                default:
+                    setMotors(70, 65); 
+                    break;
+            }
+    
+    }
+    }
+}
