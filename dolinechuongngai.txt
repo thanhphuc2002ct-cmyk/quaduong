@@ -86,7 +86,7 @@ void loop() {
 
         if (currentState == UTURN) {
             // Quay compa tại chỗ với tốc độ phù hợp
-            setMotors(80, -80); 
+            setMotors(100, -100); 
             
             // Xoay liên tục cho đến khi 1 trong 5 mắt đọc nhìn thấy vạch đen (Khác 31)
             if (val != 31) { 
