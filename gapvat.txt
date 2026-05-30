@@ -1,15 +1,10 @@
-// hệ thống xe gắp vật trên line
-
+// hệ thống xe gắp vật trên line (Dùng I2C cho cả dò line và khoảng cách)
 
 #include <Arduino.h>
 #include "config.h"
 #include "motor.h"
 #include "master.h"
 #include <ESP32Servo.h>
-
-// --- Cấu hình Cảm biến siêu âm HC-SR04 ---
-#define TRIG_PIN 13
-#define ECHO_PIN 12
 
 // --- Cấu hình Servo ---
 #define SERVO_PIN 38
@@ -20,11 +15,9 @@ Master comm;
 Servo gripper; 
 
 unsigned long lastI2CPoll = 0; 
-unsigned long lastSonarPoll = 0;
 long currentDistance = 999;
 
 bool hasObject = false; 
-
 
 enum State { FOLLOW, UTURN, PICKING_UP, DROPPING_OFF, WAITING_CLEAR };
 State currentState = FOLLOW;
@@ -33,20 +26,7 @@ unsigned long actionStartTime = 0;
 // Biến lọc nhiễu mất line
 int lostLineCount = 0;
 static uint8_t last_valid_val = 27; 
-static int detectCount = 0; // Biến lọc nhiễu khoảng cách SR04
-
-// Hàm đo khoảng cách HC-SR04
-long getDistance() {
-    digitalWrite(TRIG_PIN, LOW);
-    delayMicroseconds(2);
-    digitalWrite(TRIG_PIN, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(TRIG_PIN, LOW);
-    
-    long duration = pulseIn(ECHO_PIN, HIGH, 20000); 
-    if (duration == 0) return 999;
-    return duration * 0.034 / 2;
-}
+static int detectCount = 0; // Biến lọc nhiễu khoảng cách
 
 void setup() {
     Serial.begin(115200);
@@ -62,37 +42,27 @@ void setup() {
     gripper.write(GRIPPER_OPEN); 
     
     motorInit(); 
-    
-    pinMode(TRIG_PIN, OUTPUT);
-    pinMode(ECHO_PIN, INPUT);
 
-    Serial.println("KHOI DONG: Dung 3s gap vat -> Tha o vach -> Cho rut vat ra moi di tiep");
+    Serial.println("KHOI DONG: Dung 3s gap vat -> Tha o vach -> Cho rut vat ra moi di tiep (Full I2C)");
 }
 
 void loop() {
     unsigned long currentMillis = millis();
 
-    // 1. ĐỌC CẢM BIẾN TRƯỚC TIÊN (Chạy liên tục)
-    if (currentMillis - lastSonarPoll >= 50) {
-        long newDistance = getDistance();
-        
-
-        if (newDistance >= 0 && newDistance < 400) { 
-            currentDistance = newDistance;
-        } else if (newDistance == 999) {
-            currentDistance = 999;
-        }
-        
-        lastSonarPoll = currentMillis;
-    }
-
+    // 1. ĐỌC CẢM BIẾN LINE VÀ KHOẢNG CÁCH (Mỗi 10ms qua I2C)
     if (currentMillis - lastI2CPoll < 10) return;
     lastI2CPoll = currentMillis;
 
-    uint8_t raw_val = 255; 
-    comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-    if (raw_val == 255) return; 
-    uint8_t val = raw_val & 0x1F; 
+    // Yêu cầu 2 byte: Byte 0 là khoảng cách, Byte 1 là dữ liệu line
+    uint8_t rx_data[2] = {255, 255}; 
+    comm.I2CrequestFrom(I2C_ADDR, 2, rx_data);
+    
+    // Nếu lỗi kết nối I2C thì bỏ qua vòng lặp này
+    if (rx_data[0] == 255 && rx_data[1] == 255) return; 
+
+    // Gán dữ liệu đọc được
+    currentDistance = (long)rx_data[0];
+    uint8_t val =(~rx_data[1] & 0x1F); 
 
     // 2. CÁC TRẠNG THÁI GẮP, THẢ, CHỜ ĐỢI
     if (currentState == PICKING_UP) {
@@ -120,6 +90,7 @@ void loop() {
     if (currentState == WAITING_CLEAR) {
         setMotors(0, 0); 
         gripper.write(GRIPPER_OPEN); 
+        // Đã thả vật, chờ khoảng trống > 15cm thì mới đi tiếp
         if (currentDistance > 15 || currentDistance == 999) { 
             currentState = FOLLOW; 
             Serial.println("Da rut vat ra -> TIEP TUC HANH TRINH!");
@@ -153,7 +124,7 @@ void loop() {
         last_valid_val = val;
     }
 
-    // 5. PHÁT HIỆN VẬT CẢN
+    // 5. PHÁT HIỆN VẬT CẢN (ĐỂ GẮP)
     if (!hasObject && currentDistance > 0 && currentDistance <= 10) {
         detectCount++;
         if (detectCount >= 3) {
