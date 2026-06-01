@@ -9,8 +9,8 @@ unsigned long lastI2CPoll = 0;
 long currentDistance = 999;
 
 const int MAX_X = 5; 
-const int MAX_Y = 2;
-int grid[6][3] = {0}; 
+const int MAX_Y = 3;
+int grid[6][4] = {0}; 
 
 int currentX = 0; 
 int currentY = 0; 
