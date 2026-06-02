@@ -11,7 +11,7 @@
 extern Master comm;
 
 // Giải mê cung bằng thuật toán tìm đường ma trận và PID góc quay tự động ổn định
-void modeMazeSolver() {
+void modeMazeSolver(bool reset) {
     const int MAX_X = 5; 
     const int MAX_Y = 3;
     static int grid[6][4] = {0}; 
@@ -27,6 +27,15 @@ void modeMazeSolver() {
     static int obstacleCount = 0; 
     static float current_target_yaw = 0.0;
     static bool isInit = false;
+
+    if (reset) {
+        memset(grid, 0, sizeof(grid));
+        currentX = 0; currentY = 0; currentDir = 0;
+        currentState = FOLLOW_LINE; pendingTurn = TURN_RIGHT;
+        actionStartTime = 0; turnPhase = 0; obstacleCount = 0;
+        current_target_yaw = 0.0; isInit = false;
+        return;
+    }
 
     if (!isInit) {
         grid[0][0] = 1;
@@ -219,11 +228,16 @@ void modeMazeSolver() {
 }
 
 // Bám vạch hành trình và dừng khẩn cấp khi phát hiện chướng ngại vật phía trước
-void modeObstacleAvoidance() {
+void modeObstacleAvoidance(bool reset) {
     enum ObstacleState { FOLLOW, OBSTACLE };
     static ObstacleState state = FOLLOW;
     static unsigned long lastI2C = 0;
     static uint8_t lastVal = 27; 
+
+    if (reset) {
+        state = FOLLOW; lastI2C = 0; lastVal = 27;
+        return;
+    }
     
     unsigned long currentMillis = millis();
     if (currentMillis - lastI2C < 10) return;
@@ -267,7 +281,7 @@ void modeObstacleAvoidance() {
 }
 
 // Điều khiển cơ cấu servo kẹp nhả vật thể dựa trên tín hiệu siêu âm
-void modePickAndDrop() {
+void modePickAndDrop(bool reset) {
     enum PickState { FOLLOW, PICKING_UP, TURN_RIGHT_DROP, DROPPING_ACTION, TURN_LEFT_BACK };
     static PickState state = FOLLOW;
     static unsigned long lastI2C = 0; 
@@ -279,6 +293,13 @@ void modePickAndDrop() {
     static int turnPhase = 0;
     static Servo gripper;
     static bool isInit = false;
+
+    if (reset) {
+        state = FOLLOW; lastI2C = 0; hasObject = false; actionTime = 0;
+        lastVal = 27; detectCount = 0; drop_target_yaw = 0.0; turnPhase = 0;
+        isInit = false;
+        return;
+    }
 
     if (!isInit) {
         ESP32PWM::allocateTimer(0);
@@ -393,7 +414,7 @@ void modePickAndDrop() {
     }
 }
 // Đếm vạch ngang giao lộ và phản hồi tín hiệu âm thanh kết hợp chớp LED đa sắc
-void modeCrossroad() {
+void modeCrossroad(bool reset) {
     const int CROSS_BUZZER_PIN = 48;
     const int CROSS_LED_PIN = 38;
     const int CROSS_NUMPIXELS = 1;
@@ -418,6 +439,14 @@ void modeCrossroad() {
     static unsigned long lastI2C = 0;
     static Adafruit_NeoPixel pixels(CROSS_NUMPIXELS, CROSS_LED_PIN, NEO_GRB + NEO_KHZ800);
     static bool isInit = false;
+
+    if (reset) {
+        indState = IDLE; state = RUNNING; indPrevMillis = 0; blinkCount = 0;
+        ledState = false; targetBeeps = 0; currentBeepCount = 0; isBeepOn = false;
+        stripeCount = 0; lastVal = 255; sawMark27 = false; enableLed = false;
+        prevMillis = 0; lastI2C = 0; isInit = false;
+        return;
+    }
 
     if (!isInit) {
         pinMode(CROSS_BUZZER_PIN, OUTPUT);
@@ -556,9 +585,14 @@ void modeCrossroad() {
 }
 
 // Duy trì vết di chuyển bằng bộ nhớ trạng thái khi xe đi qua đoạn mất line hoặc cầu gãy
-void modeBrokenLine() {
+void modeBrokenLine(bool reset) {
     static unsigned long lastI2C = 0; 
     static uint8_t lastVal = 27;
+
+    if (reset) {
+        lastI2C = 0; lastVal = 27;
+        return;
+    }
 
     unsigned long currentMillis = millis();
     if (currentMillis - lastI2C < 10) return;

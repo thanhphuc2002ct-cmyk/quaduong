@@ -26,11 +26,11 @@ void loop() {
     int irKey = periph.Get_IR_Code();
     if (irKey != 0) {
         setMotors(0, 0); 
-        if (irKey == '1') { currentMode = MODE_MAZE; Serial.println("-> Chon Mode 1: Giai me cung"); }
-        else if (irKey == '2') { currentMode = MODE_OBSTACLE; Serial.println("-> Chon Mode 2: Ne vat can"); }
-        else if (irKey == '3') { currentMode = MODE_PICK; Serial.println("-> Chon Mode 3: Gap tha vat"); }
-        else if (irKey == '4') { currentMode = MODE_CROSSROAD; Serial.println("-> Chon Mode 4: Qua duong"); }
-        else if (irKey == '5') { currentMode = MODE_BROKEN_LINE; Serial.println("-> Chon Mode 5: Line dut quang"); }
+        if (irKey == '1') { currentMode = MODE_MAZE; modeMazeSolver(true); Serial.println("-> Chon Mode 1: Giai me cung"); }
+        else if (irKey == '2') { currentMode = MODE_OBSTACLE; modeObstacleAvoidance(true); Serial.println("-> Chon Mode 2: Ne vat can"); }
+        else if (irKey == '3') { currentMode = MODE_PICK; modePickAndDrop(true); Serial.println("-> Chon Mode 3: Gap tha vat"); }
+        else if (irKey == '4') { currentMode = MODE_CROSSROAD; modeCrossroad(true); Serial.println("-> Chon Mode 4: Qua duong"); }
+        else if (irKey == '5') { currentMode = MODE_BROKEN_LINE; modeBrokenLine(true); Serial.println("-> Chon Mode 5: Line dut quang"); }
         else if (irKey == 'O') { currentMode = MODE_IDLE; Serial.println("-> NGAT HE THONG (IDLE MODE)"); }
     }
 

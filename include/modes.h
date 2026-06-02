@@ -1,10 +1,10 @@
 #ifndef MODES_H
 #define MODES_H
 
-void modeMazeSolver();
-void modeObstacleAvoidance();
-void modePickAndDrop();
-void modeCrossroad();
-void modeBrokenLine();
+void modeMazeSolver(bool reset = false);
+void modeObstacleAvoidance(bool reset = false);
+void modePickAndDrop(bool reset = false);
+void modeCrossroad(bool reset = false);
+void modeBrokenLine(bool reset = false);
 
 #endif
