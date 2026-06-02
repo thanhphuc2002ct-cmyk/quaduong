@@ -1,5 +1,5 @@
 #include "bsp_periph.h"
-#include "../bsp_master/master.h"
+#include "master.h"
 
 #define DATA_LENGTH 64
 static Master master;
@@ -7,18 +7,6 @@ static uint8_t periph_data[64];
 static uint8_t data_send[64] = {0};
 static uint8_t periph_data_index = 0, get_key = 0;
 
-static inline void periph_get_serial_data() 
-{
-    uint8_t index = 0;
-    while(master.UARTavailable(Serial1)) 
-    {
-        periph_data[index++] = master.UARTread(Serial1);
-        Serial.print("Received from Serial1: ");
-        Serial.println(periph_data[index - 1]);
-        get_key = 1;
-    }
-    periph_data_index = index;
-}
 
 static inline uint8_t IR_Decode17(uint16_t ir_data) 
 {
@@ -140,23 +128,55 @@ void Peripheral::Buzzer_On()
     master.UARTsend(Serial1, data_send, DATA_LENGTH); // Send the buzzer control data to the slave device
 }
 
+static inline void periph_get_serial_data() 
+{
+    static uint8_t index = 0; 
+    
+    while(master.UARTavailable(Serial1)) 
+    {
+        uint8_t c = master.UARTread(Serial1);
+        
+        // MẸO DEBUG: Nếu muốn biết mạch có nhận được tín hiệu hay không, hãy bỏ // ở dòng dưới
+        // Serial.print((char)c); 
+
+        if (c == '$') { 
+            index = 0; // Bắt đầu một gói tin mới
+        }
+        
+        periph_data[index++] = c;
+
+        if (c == '#') { 
+            periph_data_index = index; 
+            get_key = 1; // <--- CHỈ BÁO HIỆU KHI ĐÃ NHẬN TRỌN VẸN GÓI TIN TỪ MẠCH SLAVE
+            index = 0; 
+            break; 
+        }
+        
+        if (index >= 64) index = 0; // Chống tràn RAM
+    }
+}
+
 uint8_t Peripheral::Get_IR_Code()
 {
     periph_get_serial_data();
 
     if(get_key)
     {
+        get_key = 0; // SỬA QUAN TRỌNG: Reset cờ ngay lập tức để tránh giải mã lặp lại 1 phím cũ
+        
         if(periph_data[0] == '$' && periph_data[periph_data_index - 1] == '#')
         {
             if(periph_data[1] == DATA && periph_data[2] == IR) {
-                uint8_t decoded_key = IR_Decode17((periph_data[5] << 8) | periph_data[6]); // Decode the IR data to get the corresponding key
-                Serial.print("Decoded IR Key: ");
-                Serial.println((char)decoded_key);  
-                get_key = 0; // Reset the get_key flag after processing 
+                uint8_t decoded_key = IR_Decode17((periph_data[5] << 8) | periph_data[6]);
+                
+                // MẸO DEBUG: Bỏ // ở 2 dòng dưới để in ra phím bấm thô
+                // Serial.print("Phim IR da giai ma: ");
+                // Serial.println((char)decoded_key);  
+                
                 return decoded_key;
             }
         }
     }
     
-    return 0; // Return 0 if no valid IR code is received
+    return 0; 
 }
