@@ -2,6 +2,8 @@
 #include "config.h"
 #include "motor.h"
 #include "master.h"
+#include "mpu.h"
+#include "pid.h"
 
 Master comm;
 
@@ -33,11 +35,14 @@ unsigned long actionStartTime = 0;
 int turnPhase = 0;
 
 int obstacleCount = 0; 
+float current_target_yaw = 0.0; // Lưu góc mục tiêu hiện tại cho PID
 
 void setup() {
     Serial.begin(115200);
     comm.beginI2C(SDA_PIN, SCL_PIN);
     motorInit(); 
+    
+    Init_MPU(MPU_SDA_PIN, MPU_SCL_PIN); // Khởi tạo MPU6050
 
     grid[0][0] = 1;
 
@@ -46,6 +51,8 @@ void setup() {
 }
 
 void loop() {
+    updateAngle(); // Đọc góc liên tục từ MPU6050
+    
     unsigned long currentMillis = millis();
 
     if (currentState == FINISHED) {
@@ -66,6 +73,10 @@ void loop() {
     
     // --- XỬ LÝ NGÃ TƯ ---
     if (currentState == FOLLOW_LINE && val == 0) {
+        setMotors(0, 0);
+        delay(1000);
+        currentMillis = millis();
+
         if (currentDir == 0) currentY++;
         else if (currentDir == 1) currentX++;
         else if (currentDir == 2) currentY--;
@@ -107,6 +118,13 @@ void loop() {
         evaluateDirection(2, currentX, currentY - 1); 
         evaluateDirection(3, currentX - 1, currentY); 
 
+        // --- ĐÓNG NHÁNH CỤT (DEAD-END FILLING) ---
+        // Nếu tất cả các hướng mở đều bị chặn, xe buộc phải quay lại đường cũ (bestScore >= 1000)
+        // Ta đánh dấu vĩnh viễn ô ngõ cụt này thành vật cản (2) để xe không bao giờ rẽ vào lại nữa.
+        if (bestScore >= 1000) {
+            grid[currentX][currentY] = 2; 
+        }
+
         if (bestDir == currentDir) {
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
@@ -123,11 +141,17 @@ void loop() {
 
     // --- TIẾN LÊN TÂM NGÃ TƯ ---
     if (currentState == NODE_ARRIVED) {
-        setMotors(70, 70); // TĂNG LÊN 70
+        driveWithHeading(70, current_target_yaw, current_angle, pidStraight);
         if (currentMillis - actionStartTime >= 250) { 
             currentState = pendingTurn; 
             turnPhase = 0;
             actionStartTime = currentMillis;
+            
+            // Cập nhật góc mục tiêu dựa trên hướng rẽ
+            // Đã sửa lại: Rẽ phải (cùng chiều kim đồng hồ) là góc ÂM, Rẽ trái là góc DƯƠNG
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 70.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 70.0);
+            else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
     }
@@ -135,36 +159,37 @@ void loop() {
     // --- QUAY GÓC ---
     if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
         
-        if (currentState == TURN_RIGHT) setMotors(80, 0); 
-        else if (currentState == TURN_LEFT) setMotors(0, 80); 
-        else setMotors(-80, 80); 
-
-        if (currentState == TURN_RIGHT || currentState == TURN_LEFT) {
-            if (currentMillis - actionStartTime >= 800) {
-                if (currentState == TURN_RIGHT) setMotors(-60, 0); 
-                else setMotors(0, -60);
-                delay(60); 
-                setMotors(0, 0);
-
+        float error_val = calculateAngleError(current_target_yaw, current_angle);
+        float error_abs = abs(error_val);
+        
+        // Chờ MPU quay đạt đến góc mục tiêu (nới lỏng sai số < 10 độ)
+        if (error_abs < 10.0) {
+            setMotors(0, 0); // Khóa cứng 2 bánh khi đạt góc chống trôi lố
+            if (turnPhase == 0) {
+                turnPhase = 1;
+                actionStartTime = currentMillis; 
+            } else if (currentMillis - actionStartTime >= 100) { // Đã ổn định góc trong 100ms
                 if (currentState == TURN_RIGHT) currentDir = (currentDir + 1) % 4;
-                else currentDir = (currentDir + 3) % 4;
+                else if (currentState == TURN_LEFT) currentDir = (currentDir + 3) % 4;
+                else currentDir = (currentDir + 2) % 4;
 
                 currentState = PUSH_THROUGH; 
                 actionStartTime = currentMillis;
             }
         } else {
-            if (turnPhase == 0) {
-                if (currentMillis - actionStartTime > 400) turnPhase = 1;
-            } 
-            else if (turnPhase == 1) {
-                if (val != 31 && val != 0) {
-                    setMotors(60, -60); 
-                    delay(60); 
-                    setMotors(0, 0);
-                    currentDir = (currentDir + 2) % 4;
-                    currentState = PUSH_THROUGH; 
-                    actionStartTime = currentMillis;
-                }
+            turnPhase = 0; // Nếu lệch lại thì reset cờ đếm thời gian
+            
+            // Khóa 1 bánh, rẽ 1 bánh tốc độ cao (80). Có xử lý giật lùi nhẹ nếu bị trớn quay lố góc.
+            if (currentState == TURN_RIGHT) {
+                if (error_val < 0) setMotors(80, 0); // Đang thiếu góc -> quay tiếp (trái chạy, phải khóa 0)
+                else setMotors(-50, 0);              // Quay lố đà -> giật lùi bánh trái lại để sửa góc
+            } else if (currentState == TURN_LEFT) {
+                if (error_val > 0) setMotors(0, 80); // Đang thiếu góc -> quay tiếp (phải chạy, trái khóa 0)
+                else setMotors(0, -50);              // Quay lố đà -> giật lùi bánh phải lại để sửa góc
+            } else {
+                // Quay đầu thì 2 bánh ngược chiều nhau tại chỗ
+                if (error_val > 0) setMotors(-60, 60); 
+                else setMotors(60, -60);
             }
         }
         return;
@@ -172,7 +197,7 @@ void loop() {
 
     // --- VƯỢT THOÁT NGÃ TƯ ---
     if (currentState == PUSH_THROUGH) {
-        setMotors(70, 70); // TĂNG LÊN 70
+        driveWithHeading(70, current_target_yaw, current_angle, pidStraight);
         if (currentMillis - actionStartTime > 150 && val != 0) {
             currentState = FOLLOW_LINE;
         } else if (currentMillis - actionStartTime > 600) { 
@@ -183,7 +208,9 @@ void loop() {
 
     // --- LÙI VỀ NGÃ TƯ ---
     if (currentState == REVERSE_TO_NODE) {
-        setMotors(-60, -60); 
+        // Dùng lại PID để lùi. Do pidStraight đã được làm mềm, nó sẽ chỉ bù trừ nhẹ để đuôi xe không văng,
+        // đồng thời khắc phục được lỗi động cơ vật lý bị lệch (kéo lùi không đều).
+        driveWithHeading(-60, current_target_yaw, current_angle, pidStraight); 
         
         if (currentMillis - actionStartTime > 300 && val == 0) {
             setMotors(0, 0);
@@ -196,7 +223,7 @@ void loop() {
     // --- BÁM VẠCH / TRÁNH VẬT CẢN ---
     if (currentState == FOLLOW_LINE) {
 
-        if (currentDistance > 0 && currentDistance <= 6) { 
+        if (currentDistance > 0 && currentDistance <= 5) { 
             obstacleCount++;
             if (obstacleCount >= 3) { 
                 setMotors(0, 0); 
@@ -216,6 +243,10 @@ void loop() {
                 else if (currentDir == 1) currentX--;
                 else if (currentDir == 2) currentY++;
                 else if (currentDir == 3) currentX++;
+
+                // Khóa cứng góc vật lý hiện tại làm mục tiêu mới.
+                // Bộ PID sẽ giữ xe lùi thẳng tắp theo phương đang đứng, không bị vặn sườn.
+                current_target_yaw = current_angle; 
 
                 currentState = REVERSE_TO_NODE; 
                 actionStartTime = millis(); 

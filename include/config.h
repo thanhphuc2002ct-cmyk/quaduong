@@ -6,6 +6,8 @@
 #define SDA_PIN 14
 #define SCL_PIN 21
 
+#define MPU_SDA_PIN 1
+#define MPU_SCL_PIN 2
 // --- Chân điều khiển động cơ ---
 #define M3_INA1 5
 #define M3_INA2 4
