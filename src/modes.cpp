@@ -75,8 +75,11 @@ void modeMazeSolver(bool reset) {
 
         grid[currentX][currentY] = 1; 
 
+        Serial.printf("\n--- DEN NGA TU: X=%d, Y=%d (Huong xe hien tai: %d) ---\n", currentX, currentY, currentDir);
+
         if (currentX == MAX_X && currentY == MAX_Y) {
             currentState = FINISHED;
+            Serial.printf(">> HOAN THANH! Da toi dich (%d,%d)\n", MAX_X, MAX_Y);
             return;
         }
 
@@ -108,14 +111,15 @@ void modeMazeSolver(bool reset) {
         }
 
         if (bestDir == currentDir) {
+            Serial.println("-> Lua chon: DI THANG");
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
         } else {
             currentState = NODE_ARRIVED; 
             actionStartTime = currentMillis;
-            if (bestDir == (currentDir + 1) % 4) pendingTurn = TURN_RIGHT;
-            else if (bestDir == (currentDir + 3) % 4) pendingTurn = TURN_LEFT;
-            else pendingTurn = TURN_AROUND;
+            if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
+            else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
+            else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
         }
         return;
     }
@@ -126,8 +130,8 @@ void modeMazeSolver(bool reset) {
             currentState = pendingTurn; 
             turnPhase = 0;
             actionStartTime = currentMillis;
-            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 90.0);
-            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 90.0);
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 80.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 80.0);
             else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
@@ -192,12 +196,21 @@ void modeMazeSolver(bool reset) {
                 else if (currentDir == 1) nx++;
                 else if (currentDir == 2) ny--;
                 else if (currentDir == 3) nx--;
-                if (nx >= 0 && nx <= MAX_X && ny >= 0 && ny <= MAX_Y) grid[nx][ny] = 2; 
+                
+                if (nx >= 0 && nx <= MAX_X && ny >= 0 && ny <= MAX_Y) {
+                    grid[nx][ny] = 2; 
+                    Serial.printf("!!! PHAT HIEN VAT CAN TAI: X=%d, Y=%d !!! Da cap nhat ban do.\n", nx, ny);
+                }
+
                 if (currentDir == 0) currentY--;
                 else if (currentDir == 1) currentX--;
                 else if (currentDir == 2) currentY++;
                 else if (currentDir == 3) currentX++;
+
+                Serial.println("-> Lui ve nga tu truoc do de tim duong khac...");
+
                 current_target_yaw = current_angle; 
+
                 currentState = REVERSE_TO_NODE; 
                 actionStartTime = millis(); 
                 obstacleCount = 0; 
