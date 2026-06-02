@@ -117,8 +117,8 @@ void modeMazeSolver() {
             currentState = pendingTurn; 
             turnPhase = 0;
             actionStartTime = currentMillis;
-            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 70.0);
-            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 70.0);
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 90.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 90.0);
             else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
@@ -127,7 +127,7 @@ void modeMazeSolver() {
     if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
         float error_val = calculateAngleError(current_target_yaw, current_angle);
         float error_abs = abs(error_val);
-        if (error_abs < 10.0) {
+        if (error_abs < 15.0) {
             setMotors(0, 0); 
             if (turnPhase == 0) {
                 turnPhase = 1;
