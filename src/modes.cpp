@@ -85,16 +85,19 @@ void modeMazeSolver(bool reset) {
 
         int bestDir = -1;
         int bestScore = 9999;
+        bool hasUnvisited = false;
 
         auto evaluateDirection = [&](int dir, int nx, int ny) {
             if (nx < 0 || nx > MAX_X || ny < 0 || ny > MAX_Y) return; 
             if (grid[nx][ny] == 2) return; 
+            if (grid[nx][ny] == 0) hasUnvisited = true;
             int score = 0;
-            if (grid[nx][ny] == 1) score += 1000; 
-            if (dir == 0) score += 10;      
-            else if (dir == 1) score += 20; 
-            else if (dir == 3) score += 30; 
-            else if (dir == 2) score += 40; 
+            if (grid[nx][ny] == 1) score += 50; 
+            score += (abs(MAX_X - nx) + abs(MAX_Y - ny)) * 10;
+            if (dir == 0) score += 1;      
+            else if (dir == 1) score += 2; 
+            else if (dir == 2) score += 100; 
+            else if (dir == 3) score += 200; 
             if (score < bestScore) {
                 bestScore = score;
                 bestDir = dir;
@@ -106,7 +109,7 @@ void modeMazeSolver(bool reset) {
         evaluateDirection(2, currentX, currentY - 1); 
         evaluateDirection(3, currentX - 1, currentY); 
 
-        if (bestScore >= 1000) {
+        if (!hasUnvisited) {
             grid[currentX][currentY] = 2; 
         }
 
