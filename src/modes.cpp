@@ -13,8 +13,8 @@ extern Master comm;
 // Giải mê cung bằng thuật toán tìm đường ma trận và PID góc quay tự động ổn định
 void modeMazeSolver(bool reset) {
     const int MAX_X = 5; 
-    const int MAX_Y = 3;
-    static int grid[6][4] = {0}; 
+    const int MAX_Y = 2;
+    static int grid[6][3] = {0}; 
     static int currentX = 0; 
     static int currentY = 0; 
     static int currentDir = 0; 
@@ -109,9 +109,9 @@ void modeMazeSolver(bool reset) {
         evaluateDirection(2, currentX, currentY - 1); 
         evaluateDirection(3, currentX - 1, currentY); 
 
-        if (!hasUnvisited) {
-            grid[currentX][currentY] = 2; 
-        }
+        // if (!hasUnvisited) {
+        //     grid[currentX][currentY] = 2; 
+        // }
 
         if (bestDir == currentDir) {
             Serial.println("-> Lua chon: DI THANG");
