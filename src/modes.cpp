@@ -154,7 +154,7 @@ void modeMazeSolver(bool reset) {
 
 // Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe vào tâm ngã tư
     if (currentState == NODE_ARRIVED) {
-        int pushSpeed = 40 + (currentMillis - actionStartTime) / 4;
+        int pushSpeed = 30 + (currentMillis - actionStartTime) / 4;
         if (pushSpeed > 90) pushSpeed = 90;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
         // if (currentMillis - actionStartTime >= 250) { 
@@ -174,7 +174,7 @@ void modeMazeSolver(bool reset) {
         float error_val = calculateAngleError(current_target_yaw, current_angle);
         float error_abs = abs(error_val);
         
-        if (error_abs < 10.0) {
+        if (error_abs < 4.0) {
             setMotors(0, 0); 
             if (turnPhase == 0) {
                 turnPhase = 1;
@@ -189,15 +189,15 @@ void modeMazeSolver(bool reset) {
             }
 } else {
             turnPhase = 0; 
-            // Cơ chế rẽ 2 giai đoạn: Chạy trớn nhanh (95) nhưng khi gần đến mốc (< 25 độ) thì tự hãm tốc (55) để triệt tiêu quán tính
             int turnSpeed = (error_abs < 25.0) ? 75 : 95; 
 
             if (currentState == TURN_RIGHT) {
-                if (error_val < 0) setMotors(turnSpeed, 0); 
-                else setMotors(-75, 0);              
+                // Cấp PWM âm nhẹ (-35) để phanh ghì bánh phải lại, giúp xe xoay vuông góc tại chỗ thay vì vẽ vòng cung đi thẳng
+                if (error_val < 0) setMotors(turnSpeed, -35); 
+                else setMotors(-75, 35);              
             } else if (currentState == TURN_LEFT) {
-                if (error_val > 0) setMotors(0, turnSpeed); 
-                else setMotors(0, -75);              
+                if (error_val > 0) setMotors(-35, turnSpeed); 
+                else setMotors(35, -75);              
             } else {
                 if (error_val > 0) setMotors(-turnSpeed, turnSpeed); 
                 else setMotors(turnSpeed, -turnSpeed);
@@ -208,7 +208,7 @@ void modeMazeSolver(bool reset) {
 
     // Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe thoát khỏi ngã tư
     if (currentState == PUSH_THROUGH) {
-        int pushSpeed = 40 + (currentMillis - actionStartTime) / 4;
+        int pushSpeed = 30 + (currentMillis - actionStartTime) / 4;
         if (pushSpeed > 90) pushSpeed = 90;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
         // if (currentMillis - actionStartTime > 150 && val != 0) currentState = FOLLOW_LINE;
