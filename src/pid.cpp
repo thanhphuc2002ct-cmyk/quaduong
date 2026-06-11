@@ -20,8 +20,15 @@ void driveWithHeading(int base_speed, float target, float current, PIDConfig &pi
     float derivative = -current_gyro_rate;
     float correction = (pid.Kp * error) + (pid.Ki * pid.integral) + (pid.Kd * derivative);
     
-    float left_pwm = base_speed - correction;
-    float right_pwm = base_speed + correction;
+    float left_pwm = base_speed;
+    float right_pwm = base_speed;
+    if (base_speed >= 0) {
+        left_pwm -= correction;
+        right_pwm += correction;
+    } else {
+        left_pwm += correction;
+        right_pwm -= correction;
+    }
 
     float max_pwm_req = max(abs(left_pwm), abs(right_pwm));
     if (max_pwm_req > 255.0) {

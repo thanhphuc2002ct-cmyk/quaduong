@@ -10,7 +10,7 @@
 
 extern Master comm;
 
-// Giải mê cung bằng thuật toán ma trận kết hợp PID góc tương đối và giảm tốc độ
+// Giải mê cung bằng thuật toán ma trận kết hợp PID góc và PWM thuần túy
 void modeMazeSolver(bool reset) {
     const int MAX_X = 5; 
     const int MAX_Y = 2;
@@ -34,6 +34,7 @@ void modeMazeSolver(bool reset) {
         currentState = FOLLOW_LINE; pendingTurn = TURN_RIGHT;
         actionStartTime = 0; turnPhase = 0; obstacleCount = 0;
         current_target_yaw = 0.0; isInit = false;
+        resetEncoders();
         return;
     }
 
@@ -96,6 +97,17 @@ void modeMazeSolver(bool reset) {
             if (grid[nx][ny] == 2) return; 
             if (grid[nx][ny] == 0) hasUnvisited = true;
             
+            int freeWays = 0;
+            if (ny + 1 <= MAX_Y && grid[nx][ny + 1] != 2) freeWays++; 
+            if (nx + 1 <= MAX_X && grid[nx + 1][ny] != 2) freeWays++; 
+            if (ny - 1 >= 0 && grid[nx][ny - 1] != 2) freeWays++;     
+            if (nx - 1 >= 0 && grid[nx - 1][ny] != 2) freeWays++;     
+            
+            if (freeWays <= 1 && !(nx == MAX_X && ny == MAX_Y)) {
+                grid[nx][ny] = 2; 
+                return; 
+            }
+            
             int score = 0;
             if (grid[nx][ny] == 1) score += 50; 
             
@@ -128,9 +140,11 @@ void modeMazeSolver(bool reset) {
             Serial.println("-> Lua chon: DI THANG");
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
+            resetEncoders();
         } else {
             currentState = NODE_ARRIVED; 
             actionStartTime = currentMillis;
+            resetEncoders(); 
             if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
             else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
             else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
@@ -138,14 +152,17 @@ void modeMazeSolver(bool reset) {
         return;
     }
 
+    // Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe vào tâm ngã tư
     if (currentState == NODE_ARRIVED) {
         driveWithHeading(100, current_target_yaw, current_angle, pidStraight);
-        if (currentMillis - actionStartTime >= 250) { 
+        // if (currentMillis - actionStartTime >= 250) { 
+        if (getEncoderCount() >= 150) { 
             currentState = pendingTurn; 
             turnPhase = 0;
+            resetEncoders();
             actionStartTime = currentMillis;
-            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 80.0);
-            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 80.0);
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 90.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 90.0);
             else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
@@ -154,7 +171,8 @@ void modeMazeSolver(bool reset) {
     if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
         float error_val = calculateAngleError(current_target_yaw, current_angle);
         float error_abs = abs(error_val);
-        if (error_abs < 15.0) {
+        
+        if (error_abs < 10.0) {
             setMotors(0, 0); 
             if (turnPhase == 0) {
                 turnPhase = 1;
@@ -165,27 +183,39 @@ void modeMazeSolver(bool reset) {
                 else currentDir = (currentDir + 2) % 4;
                 currentState = PUSH_THROUGH; 
                 actionStartTime = currentMillis;
+                resetEncoders(); 
             }
-        } else {
+} else {
             turnPhase = 0; 
+            // Cơ chế rẽ 2 giai đoạn: Chạy trớn nhanh (95) nhưng khi gần đến mốc (< 25 độ) thì tự hãm tốc (55) để triệt tiêu quán tính
+            int turnSpeed = (error_abs < 25.0) ? 75 : 95; 
+
             if (currentState == TURN_RIGHT) {
-                if (error_val < 0) setMotors(115, 0); 
-                else setMotors(-65, 0);              
+                if (error_val < 0) setMotors(turnSpeed, 0); 
+                else setMotors(-75, 0);              
             } else if (currentState == TURN_LEFT) {
-                if (error_val > 0) setMotors(0, 115); 
-                else setMotors(0, -65);              
+                if (error_val > 0) setMotors(0, turnSpeed); 
+                else setMotors(0, -75);              
             } else {
-                if (error_val > 0) setMotors(-80, 80); 
-                else setMotors(80, -80);
+                if (error_val > 0) setMotors(-turnSpeed, turnSpeed); 
+                else setMotors(turnSpeed, -turnSpeed);
             }
         }
         return;
     }
 
+    // Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe thoát khỏi ngã tư
     if (currentState == PUSH_THROUGH) {
         driveWithHeading(100, current_target_yaw, current_angle, pidStraight);
-        if (currentMillis - actionStartTime > 150 && val != 0) currentState = FOLLOW_LINE;
-        else if (currentMillis - actionStartTime > 600) currentState = FOLLOW_LINE;
+        // if (currentMillis - actionStartTime > 150 && val != 0) currentState = FOLLOW_LINE;
+        // else if (currentMillis - actionStartTime > 600) currentState = FOLLOW_LINE;
+        if (getEncoderCount() >= 100 && val != 0) {
+            currentState = FOLLOW_LINE;
+            resetEncoders();
+        } else if (getEncoderCount() >= 400) {
+            currentState = FOLLOW_LINE;
+            resetEncoders();
+        }
         return;
     }
 
@@ -203,7 +233,7 @@ void modeMazeSolver(bool reset) {
         if (currentDistance > 0 && currentDistance <= 5) { 
             obstacleCount++;
             if (obstacleCount >= 3) { 
-                setMotors(0, 0); 
+                setMotors(0, 0);
                 delay(1000); 
                 updateAngle(); 
                 int nx = currentX, ny = currentY;
@@ -222,9 +252,6 @@ void modeMazeSolver(bool reset) {
                 else if (currentDir == 2) currentY++;
                 else if (currentDir == 3) currentX++;
 
-                // currentX = constrain(currentX, 0, MAX_X);
-                // currentY = constrain(currentY, 0, MAX_Y);
-
                 Serial.println("-> Lui ve nga tu truoc do de tim duong khac...");
 
                 current_target_yaw = current_angle; 
@@ -232,6 +259,7 @@ void modeMazeSolver(bool reset) {
                 currentState = REVERSE_TO_NODE; 
                 actionStartTime = millis(); 
                 obstacleCount = 0; 
+                resetEncoders();
                 return;
             }
         } else {
@@ -240,24 +268,23 @@ void modeMazeSolver(bool reset) {
 
         switch (val) {
             case 27: case 17: setMotors(100, 100); break; 
-            case 19: setMotors(65, 85); break; 
-            case 23: setMotors(40, 85); break; 
-            case 7:  setMotors(20, 100); break; 
-            case 15: setMotors(0, 115); break; 
-            case 3:  setMotors(-20, 130); break;
-            case 1:  setMotors(-40, 145); break; 
-            case 25: setMotors(85, 65); break; 
-            case 29: setMotors(85, 40); break; 
-            case 28: setMotors(100, 20); break; 
-            case 30: setMotors(115, 0); break; 
-            case 24: setMotors(130, -20); break; 
-            case 16: setMotors(145, -40); break; 
-            case 31: setMotors(60, 60); break; 
+            case 19: setMotors(85, 105); break; 
+            case 23: setMotors(65, 110); break; 
+            case 7:  setMotors(40, 115); break; 
+            case 15: setMotors(10, 125); break; 
+            case 3:  setMotors(-20, 135); break;
+            case 1:  setMotors(-50, 150); break; 
+            case 25: setMotors(105, 85); break; 
+            case 29: setMotors(110, 65); break; 
+            case 28: setMotors(115, 40); break; 
+            case 30: setMotors(125, 10); break; 
+            case 24: setMotors(135, -20); break; 
+            case 16: setMotors(150, -50); break; 
+            case 31: setMotors(70, 70); break; 
             default: setMotors(100, 100); break; 
         }
     }
 }
-
 
 // Bám vạch hành trình và dừng khẩn cấp khi phát hiện chướng ngại vật phía trước
 void modeObstacleAvoidance(bool reset) {
