@@ -97,7 +97,7 @@ void modeMazeSolver(bool reset) {
             if (grid[nx][ny] == 0) hasUnvisited = true;
             
             int score = 0;
-            if (grid[nx][ny] == 1) score += 1000; 
+            if (grid[nx][ny] == 1) score += 50; 
             
             score += (abs(MAX_X - nx) + abs(MAX_Y - ny)) * 10;
             

@@ -18,6 +18,10 @@
 #define M4_INA1 18
 #define M4_INA2 17
 
+#define ENC_L_A 9
+#define ENC_L_B 8
+#define ENC_R_A 11
+#define ENC_R_B 10
 // Tốc độ mặc định
 #define SPEED_DEFAULT 150
 

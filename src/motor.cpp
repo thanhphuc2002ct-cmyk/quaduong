@@ -9,13 +9,12 @@ void motorInit() {
     setMotors(0, 0);
 }
 
-// Trim giảm 15 đơn vị PWM cho bánh trái để cân bằng phần cứng và giữ vạch giữa
 void setMotors(int speedLeft, int speedRight) {
     if (speedLeft > 0) {
-        speedLeft -= 10;
+        speedLeft -= 0;
         if (speedLeft < 0) speedLeft = 0;
     } else if (speedLeft < 0) {
-        speedLeft += 10;
+        speedLeft += 0;
         if (speedLeft > 0) speedLeft = 0;
     }
 
