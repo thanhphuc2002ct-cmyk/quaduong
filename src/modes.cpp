@@ -152,9 +152,11 @@ void modeMazeSolver(bool reset) {
         return;
     }
 
-    // Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe vào tâm ngã tư
+// Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe vào tâm ngã tư
     if (currentState == NODE_ARRIVED) {
-        driveWithHeading(100, current_target_yaw, current_angle, pidStraight);
+        int pushSpeed = 40 + (currentMillis - actionStartTime) / 4;
+        if (pushSpeed > 90) pushSpeed = 90;
+        driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
         // if (currentMillis - actionStartTime >= 250) { 
         if (getEncoderCount() >= 150) { 
             currentState = pendingTurn; 
@@ -206,7 +208,9 @@ void modeMazeSolver(bool reset) {
 
     // Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe thoát khỏi ngã tư
     if (currentState == PUSH_THROUGH) {
-        driveWithHeading(100, current_target_yaw, current_angle, pidStraight);
+        int pushSpeed = 40 + (currentMillis - actionStartTime) / 4;
+        if (pushSpeed > 90) pushSpeed = 90;
+        driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
         // if (currentMillis - actionStartTime > 150 && val != 0) currentState = FOLLOW_LINE;
         // else if (currentMillis - actionStartTime > 600) currentState = FOLLOW_LINE;
         if (getEncoderCount() >= 100 && val != 0) {
