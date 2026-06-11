@@ -10,7 +10,7 @@
 
 extern Master comm;
 
-// Giải mê cung bằng thuật toán tìm đường ma trận và PID góc quay tự động ổn định
+// Giải mê cung bằng thuật toán ma trận kết hợp PID góc tương đối và giảm tốc độ
 void modeMazeSolver(bool reset) {
     const int MAX_X = 5; 
     const int MAX_Y = 2;
@@ -19,244 +19,245 @@ void modeMazeSolver(bool reset) {
     static int currentY = 0; 
     static int currentDir = 0; 
 
-   enum State { FOLLOW_LINE, NODE_ARRIVED, TURN_RIGHT, TURN_LEFT, TURN_AROUND, PUSH_THROUGH, REVERSE_TO_NODE, FINISHED };
-static State currentState = FOLLOW_LINE; 
-static State pendingTurn = TURN_RIGHT; 
-static unsigned long actionStartTime = 0;
-static int turnPhase = 0;
-static int obstacleCount = 0; 
-static float current_target_yaw = 0.0;
-static bool isInit = false;
+    enum State { FOLLOW_LINE, NODE_ARRIVED, TURN_RIGHT, TURN_LEFT, TURN_AROUND, PUSH_THROUGH, REVERSE_TO_NODE, FINISHED };
+    static State currentState = FOLLOW_LINE; 
+    static State pendingTurn = TURN_RIGHT; 
+    static unsigned long actionStartTime = 0;
+    static int turnPhase = 0;
+    static int obstacleCount = 0; 
+    static float current_target_yaw = 0.0;
+    static bool isInit = false;
 
-if (reset) {
-    memset(grid, 0, sizeof(grid));
-    currentX = 0; currentY = 0; currentDir = 0;
-    currentState = FOLLOW_LINE; pendingTurn = TURN_RIGHT;
-    actionStartTime = 0; turnPhase = 0; obstacleCount = 0;
-    current_target_yaw = 0.0; isInit = false;
-    return;
-}
+    if (reset) {
+        memset(grid, 0, sizeof(grid));
+        currentX = 0; currentY = 0; currentDir = 0;
+        currentState = FOLLOW_LINE; pendingTurn = TURN_RIGHT;
+        actionStartTime = 0; turnPhase = 0; obstacleCount = 0;
+        current_target_yaw = 0.0; isInit = false;
+        return;
+    }
 
-if (!isInit) {
-    grid[0][0] = 1;
-    isInit = true;
-}
+    if (!isInit) {
+        grid[0][0] = 1;
+        isInit = true;
+    }
 
-updateAngle(); 
-unsigned long currentMillis = millis();
-
-if (currentState == FINISHED) {
-    setMotors(0, 0); 
-    return;
-}
-
-if (currentMillis - actionStartTime < 10 && currentState != NODE_ARRIVED && currentState != TURN_RIGHT && currentState != TURN_LEFT && currentState != TURN_AROUND && currentState != PUSH_THROUGH && currentState != REVERSE_TO_NODE) {
-    static unsigned long lastI2CPoll = 0;
-    if (currentMillis - lastI2CPoll < 10) return;
-    lastI2CPoll = currentMillis;
-}
-
-uint8_t rx_data[2] = {255, 255}; 
-comm.I2CrequestFrom(I2C_ADDR, 2, rx_data); 
-if (rx_data[0] == 255 && rx_data[1] == 255) return; 
-
-long currentDistance = (long)rx_data[0];     
-uint8_t val = (~rx_data[1]) & 0x1F;        
-
-if (currentState == FOLLOW_LINE && val == 0) {
-    setMotors(0, 0);
-    delay(1000);
     updateAngle(); 
-    currentMillis = millis();
+    unsigned long currentMillis = millis();
 
-    if (currentDir == 0) currentY++;
-    else if (currentDir == 1) currentX++;
-    else if (currentDir == 2) currentY--;
-    else if (currentDir == 3) currentX--;
-
-    currentX = constrain(currentX, 0, MAX_X);
-    currentY = constrain(currentY, 0, MAX_Y);
-
-    grid[currentX][currentY] = 1; 
-
-    Serial.printf("\n--- DEN NGA TU: X=%d, Y=%d (Huong xe hien tai: %d) ---\n", currentX, currentY, currentDir);
-
-    if (currentX == MAX_X && currentY == MAX_Y) {
-        currentState = FINISHED;
-        Serial.printf(">> HOAN THANH! Da toi dich (%d,%d)\n", MAX_X, MAX_Y);
-        return;
-    }
-
-    int bestDir = -1;
-    int bestScore = 9999;
-    bool hasUnvisited = false;
-
-    auto evaluateDirection = [&](int dir, int nx, int ny) {
-        if (nx < 0 || nx > MAX_X || ny < 0 || ny > MAX_Y) return; 
-        if (grid[nx][ny] == 2) return; 
-        if (grid[nx][ny] == 0) hasUnvisited = true;
-        
-        int score = 0;
-        if (grid[nx][ny] == 1) score += 1000; 
-        
-        score += (abs(MAX_X - nx) + abs(MAX_Y - ny)) * 10;
-        
-        int relDir = (dir - currentDir + 4) % 4;
-        if (relDir == 0) score += 0;       
-        else if (relDir == 1) score += 20; 
-        else if (relDir == 3) score += 20; 
-        else if (relDir == 2) score += 200; 
-
-        if (score < bestScore) {
-            bestScore = score;
-            bestDir = dir;
-        }
-    };
-
-    evaluateDirection(0, currentX, currentY + 1); 
-    evaluateDirection(1, currentX + 1, currentY); 
-    evaluateDirection(2, currentX, currentY - 1); 
-    evaluateDirection(3, currentX - 1, currentY); 
-
-    if (bestDir == -1) {
-        Serial.println("-> MAZE VO NGHIEM! Tat ca cac huong deu bi chan.");
-        currentState = FINISHED;
-        return;
-    }
-
-    if (bestDir == currentDir) {
-        Serial.println("-> Lua chon: DI THANG");
-        currentState = PUSH_THROUGH;
-        actionStartTime = currentMillis;
-    } else {
-        currentState = NODE_ARRIVED; 
-        actionStartTime = currentMillis;
-        if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
-        else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
-        else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
-    }
-    return;
-}
-
-if (currentState == NODE_ARRIVED) {
-    driveWithHeading(70, current_target_yaw, current_angle, pidStraight);
-    if (currentMillis - actionStartTime >= 250) { 
-        currentState = pendingTurn; 
-        turnPhase = 0;
-        actionStartTime = currentMillis;
-        if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 80.0);
-        else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 80.0);
-        else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
-    }
-    return;
-}
-
-if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
-    float error_val = calculateAngleError(current_target_yaw, current_angle);
-    float error_abs = abs(error_val);
-    if (error_abs < 15.0) {
+    if (currentState == FINISHED) {
         setMotors(0, 0); 
-        if (turnPhase == 0) {
-            turnPhase = 1;
-            actionStartTime = currentMillis; 
-        } else if (currentMillis - actionStartTime >= 100) { 
-            if (currentState == TURN_RIGHT) currentDir = (currentDir + 1) % 4;
-            else if (currentState == TURN_LEFT) currentDir = (currentDir + 3) % 4;
-            else currentDir = (currentDir + 2) % 4;
-            currentState = PUSH_THROUGH; 
-            actionStartTime = currentMillis;
-        }
-    } else {
-        turnPhase = 0; 
-        if (currentState == TURN_RIGHT) {
-            if (error_val < 0) setMotors(80, 0); 
-            else setMotors(-50, 0);              
-        } else if (currentState == TURN_LEFT) {
-            if (error_val > 0) setMotors(0, 80); 
-            else setMotors(0, -50);              
-        } else {
-            if (error_val > 0) setMotors(-60, 60); 
-            else setMotors(60, -60);
-        }
+        return;
     }
-    return;
-}
+    
+    if (currentMillis - actionStartTime < 10 && currentState != NODE_ARRIVED && currentState != TURN_RIGHT && currentState != TURN_LEFT && currentState != TURN_AROUND && currentState != PUSH_THROUGH && currentState != REVERSE_TO_NODE) {
+        static unsigned long lastI2CPoll = 0;
+        if (currentMillis - lastI2CPoll < 10) return;
+        lastI2CPoll = currentMillis;
+    }
 
-if (currentState == PUSH_THROUGH) {
-    driveWithHeading(70, current_target_yaw, current_angle, pidStraight);
-    if (currentMillis - actionStartTime > 150 && val != 0) currentState = FOLLOW_LINE;
-    else if (currentMillis - actionStartTime > 600) currentState = FOLLOW_LINE;
-    return;
-}
+    uint8_t rx_data[2] = {255, 255}; 
+    comm.I2CrequestFrom(I2C_ADDR, 2, rx_data); 
+    if (rx_data[0] == 255 && rx_data[1] == 255) return; 
 
-if (currentState == REVERSE_TO_NODE) {
-    driveWithHeading(-60, current_target_yaw, current_angle, pidStraight); 
-    if (currentMillis - actionStartTime > 300 && val == 0) {
+    long currentDistance = (long)rx_data[0];     
+    uint8_t val = (~rx_data[1]) & 0x1F;        
+    
+    if (currentState == FOLLOW_LINE && val == 0) {
         setMotors(0, 0);
-        delay(50); 
-        currentState = FOLLOW_LINE; 
-    }
-    return;
-}
+        delay(1000);
+        updateAngle(); 
+        currentMillis = millis();
 
-if (currentState == FOLLOW_LINE) {
-    if (currentDistance > 0 && currentDistance <= 5) { 
-        obstacleCount++;
-        if (obstacleCount >= 3) { 
-            setMotors(0, 0); 
-            delay(1000); 
-            updateAngle(); 
-            int nx = currentX, ny = currentY;
-            if (currentDir == 0) ny++;
-            else if (currentDir == 1) nx++;
-            else if (currentDir == 2) ny--;
-            else if (currentDir == 3) nx--;
-            
-            if (nx >= 0 && nx <= MAX_X && ny >= 0 && ny <= MAX_Y) {
-                grid[nx][ny] = 2; 
-                Serial.printf("!!! PHAT HIEN VAT CAN TAI: X=%d, Y=%d !!! Da cap nhat ban do.\n", nx, ny);
-            }
+        if (currentDir == 0) currentY++;
+        else if (currentDir == 1) currentX++;
+        else if (currentDir == 2) currentY--;
+        else if (currentDir == 3) currentX--;
 
-            if (currentDir == 0) currentY--;
-            else if (currentDir == 1) currentX--;
-            else if (currentDir == 2) currentY++;
-            else if (currentDir == 3) currentX++;
+        currentX = constrain(currentX, 0, MAX_X);
+        currentY = constrain(currentY, 0, MAX_Y);
 
-            currentX = constrain(currentX, 0, MAX_X);
-            currentY = constrain(currentY, 0, MAX_Y);
+        grid[currentX][currentY] = 1; 
 
-            Serial.println("-> Lui ve nga tu truoc do de tim duong khac...");
+        Serial.printf("\n--- DEN NGA TU: X=%d, Y=%d (Huong xe hien tai: %d) ---\n", currentX, currentY, currentDir);
 
-            current_target_yaw = current_angle; 
-
-            currentState = REVERSE_TO_NODE; 
-            actionStartTime = millis(); 
-            obstacleCount = 0; 
+        if (currentX == MAX_X && currentY == MAX_Y) {
+            currentState = FINISHED;
+            Serial.printf(">> HOAN THANH! Da toi dich (%d,%d)\n", MAX_X, MAX_Y);
             return;
         }
-    } else {
-        obstacleCount = 0;
+
+        int bestDir = -1;
+        int bestScore = 9999;
+        bool hasUnvisited = false;
+
+        auto evaluateDirection = [&](int dir, int nx, int ny) {
+            if (nx < 0 || nx > MAX_X || ny < 0 || ny > MAX_Y) return; 
+            if (grid[nx][ny] == 2) return; 
+            if (grid[nx][ny] == 0) hasUnvisited = true;
+            
+            int score = 0;
+            if (grid[nx][ny] == 1) score += 1000; 
+            
+            score += (abs(MAX_X - nx) + abs(MAX_Y - ny)) * 10;
+            
+            int relDir = (dir - currentDir + 4) % 4;
+            if (relDir == 0) score += 0;       
+            else if (relDir == 1) score += 20; 
+            else if (relDir == 3) score += 20; 
+            else if (relDir == 2) score += 200; 
+
+            if (score < bestScore) {
+                bestScore = score;
+                bestDir = dir;
+            }
+        };
+
+        evaluateDirection(0, currentX, currentY + 1); 
+        evaluateDirection(1, currentX + 1, currentY); 
+        evaluateDirection(2, currentX, currentY - 1); 
+        evaluateDirection(3, currentX - 1, currentY); 
+
+        if (bestDir == -1) {
+            Serial.println("-> MAZE VO NGHIEM! Tat ca cac huong deu bi chan.");
+            currentState = FINISHED;
+            return;
+        }
+
+        if (bestDir == currentDir) {
+            Serial.println("-> Lua chon: DI THANG");
+            currentState = PUSH_THROUGH;
+            actionStartTime = currentMillis;
+        } else {
+            currentState = NODE_ARRIVED; 
+            actionStartTime = currentMillis;
+            if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
+            else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
+            else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
+        }
+        return;
     }
 
-    switch (val) {
-        case 27: case 17: setMotors(70, 70); break; 
-        case 19: setMotors(45, 60); break; 
-        case 23: setMotors(30, 60); break; 
-        case 7:  setMotors(15, 70); break; 
-        case 15: setMotors(0, 80); break; 
-        case 3:  setMotors(-15, 90); break;
-        case 1:  setMotors(-30, 100); break; 
-        case 25: setMotors(60, 45); break; 
-        case 29: setMotors(60, 30); break; 
-        case 28: setMotors(70, 15); break; 
-        case 30: setMotors(80, 0); break; 
-        case 24: setMotors(90, -15); break; 
-        case 16: setMotors(100, -30); break; 
-        case 31: setMotors(40, 40); break; 
-        default: setMotors(70, 70); break; 
+    if (currentState == NODE_ARRIVED) {
+        driveWithHeading(100, current_target_yaw, current_angle, pidStraight);
+        if (currentMillis - actionStartTime >= 250) { 
+            currentState = pendingTurn; 
+            turnPhase = 0;
+            actionStartTime = currentMillis;
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 80.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 80.0);
+            else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
+        }
+        return;
+    }
+
+    if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
+        float error_val = calculateAngleError(current_target_yaw, current_angle);
+        float error_abs = abs(error_val);
+        if (error_abs < 15.0) {
+            setMotors(0, 0); 
+            if (turnPhase == 0) {
+                turnPhase = 1;
+                actionStartTime = currentMillis; 
+            } else if (currentMillis - actionStartTime >= 100) { 
+                if (currentState == TURN_RIGHT) currentDir = (currentDir + 1) % 4;
+                else if (currentState == TURN_LEFT) currentDir = (currentDir + 3) % 4;
+                else currentDir = (currentDir + 2) % 4;
+                currentState = PUSH_THROUGH; 
+                actionStartTime = currentMillis;
+            }
+        } else {
+            turnPhase = 0; 
+            if (currentState == TURN_RIGHT) {
+                if (error_val < 0) setMotors(115, 0); 
+                else setMotors(-65, 0);              
+            } else if (currentState == TURN_LEFT) {
+                if (error_val > 0) setMotors(0, 115); 
+                else setMotors(0, -65);              
+            } else {
+                if (error_val > 0) setMotors(-80, 80); 
+                else setMotors(80, -80);
+            }
+        }
+        return;
+    }
+
+    if (currentState == PUSH_THROUGH) {
+        driveWithHeading(100, current_target_yaw, current_angle, pidStraight);
+        if (currentMillis - actionStartTime > 150 && val != 0) currentState = FOLLOW_LINE;
+        else if (currentMillis - actionStartTime > 600) currentState = FOLLOW_LINE;
+        return;
+    }
+
+    if (currentState == REVERSE_TO_NODE) {
+        driveWithHeading(-80, current_target_yaw, current_angle, pidStraight); 
+        if (currentMillis - actionStartTime > 300 && val == 0) {
+            setMotors(0, 0);
+            delay(50); 
+            currentState = FOLLOW_LINE; 
+        }
+        return;
+    }
+
+    if (currentState == FOLLOW_LINE) {
+        if (currentDistance > 0 && currentDistance <= 5) { 
+            obstacleCount++;
+            if (obstacleCount >= 3) { 
+                setMotors(0, 0); 
+                delay(1000); 
+                updateAngle(); 
+                int nx = currentX, ny = currentY;
+                if (currentDir == 0) ny++;
+                else if (currentDir == 1) nx++;
+                else if (currentDir == 2) ny--;
+                else if (currentDir == 3) nx--;
+                
+                if (nx >= 0 && nx <= MAX_X && ny >= 0 && ny <= MAX_Y) {
+                    grid[nx][ny] = 2; 
+                    Serial.printf("!!! PHAT HIEN VAT CAN TAI: X=%d, Y=%d !!! Da cap nhat ban do.\n", nx, ny);
+                }
+
+                if (currentDir == 0) currentY--;
+                else if (currentDir == 1) currentX--;
+                else if (currentDir == 2) currentY++;
+                else if (currentDir == 3) currentX++;
+
+                // currentX = constrain(currentX, 0, MAX_X);
+                // currentY = constrain(currentY, 0, MAX_Y);
+
+                Serial.println("-> Lui ve nga tu truoc do de tim duong khac...");
+
+                current_target_yaw = current_angle; 
+
+                currentState = REVERSE_TO_NODE; 
+                actionStartTime = millis(); 
+                obstacleCount = 0; 
+                return;
+            }
+        } else {
+            obstacleCount = 0;
+        }
+
+        switch (val) {
+            case 27: case 17: setMotors(100, 100); break; 
+            case 19: setMotors(65, 85); break; 
+            case 23: setMotors(40, 85); break; 
+            case 7:  setMotors(20, 100); break; 
+            case 15: setMotors(0, 115); break; 
+            case 3:  setMotors(-20, 130); break;
+            case 1:  setMotors(-40, 145); break; 
+            case 25: setMotors(85, 65); break; 
+            case 29: setMotors(85, 40); break; 
+            case 28: setMotors(100, 20); break; 
+            case 30: setMotors(115, 0); break; 
+            case 24: setMotors(130, -20); break; 
+            case 16: setMotors(145, -40); break; 
+            case 31: setMotors(60, 60); break; 
+            default: setMotors(100, 100); break; 
+        }
     }
 }
-}
+
 
 // Bám vạch hành trình và dừng khẩn cấp khi phát hiện chướng ngại vật phía trước
 void modeObstacleAvoidance(bool reset) {

@@ -9,21 +9,30 @@ void motorInit() {
     setMotors(0, 0);
 }
 
+// Trim giảm 15 đơn vị PWM cho bánh trái để cân bằng phần cứng và giữ vạch giữa
 void setMotors(int speedLeft, int speedRight) {
-    // Động cơ trái (M3)
+    if (speedLeft > 0) {
+        speedLeft -= 10;
+        if (speedLeft < 0) speedLeft = 0;
+    } else if (speedLeft < 0) {
+        speedLeft += 10;
+        if (speedLeft > 0) speedLeft = 0;
+    }
+
+    speedLeft = constrain(speedLeft, -255, 255);
+    speedRight = constrain(speedRight, -255, 255);
+
     if (speedLeft > 0) {
         analogWrite(M3_INA1, 255 - speedLeft);
-        analogWrite(M3_INA2, 255); // Thay digitalWrite bằng analogWrite
+        analogWrite(M3_INA2, 255); 
     } else if (speedLeft < 0) {
-        analogWrite(M3_INA1, 255); // Thay digitalWrite bằng analogWrite
+        analogWrite(M3_INA1, 255); 
         analogWrite(M3_INA2, 255 + speedLeft);
     } else {
-        // Cúp điện hoàn toàn, thả trôi (Coast)
         analogWrite(M3_INA1, 0); 
         analogWrite(M3_INA2, 0);
     }
 
-    // Động cơ phải (M4)
     if (speedRight > 0) {
         analogWrite(M4_INA1, 255 - speedRight);
         analogWrite(M4_INA2, 255); 
@@ -31,7 +40,6 @@ void setMotors(int speedLeft, int speedRight) {
         analogWrite(M4_INA1, 255); 
         analogWrite(M4_INA2, 255 + speedRight);
     } else {
-        // Cúp điện hoàn toàn, thả trôi (Coast)
         analogWrite(M4_INA1, 0);
         analogWrite(M4_INA2, 0);
     }
