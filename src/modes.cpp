@@ -34,7 +34,6 @@ void modeMazeSolver(bool reset) {
         currentState = FOLLOW_LINE; pendingTurn = TURN_RIGHT;
         actionStartTime = 0; turnPhase = 0; obstacleCount = 0;
         current_target_yaw = 0.0; isInit = false;
-        resetEncoders();
         return;
     }
 
@@ -140,11 +139,9 @@ void modeMazeSolver(bool reset) {
             Serial.println("-> Lua chon: DI THANG");
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
-            resetEncoders();
         } else {
             currentState = NODE_ARRIVED; 
             actionStartTime = currentMillis;
-            resetEncoders(); 
             if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
             else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
             else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
@@ -152,17 +149,21 @@ void modeMazeSolver(bool reset) {
         return;
     }
 
-// Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe vào tâm ngã tư
+// Chuyển sang dùng thời gian (millis) để đẩy xe vào tâm ngã tư thay cho Encoder
     if (currentState == NODE_ARRIVED) {
-        int pushSpeed = 30 + (currentMillis - actionStartTime) / 4;
+        int pushSpeed = 20 + (currentMillis - actionStartTime) / 4;
         if (pushSpeed > 90) pushSpeed = 90;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
-        // if (currentMillis - actionStartTime >= 250) { 
-        if (getEncoderCount() >= 150) { 
+        
+        // Chờ 200ms để xe nhích vào đúng tâm ngã tư (có thể tinh chỉnh lại số 200 này)
+        if (currentMillis - actionStartTime >= 200) { 
+            setMotors(0, 0); 
+            delay(150); // Khựng lại 0.15s triệt tiêu quán tính tiến cho xe đứng im phăng phắc rồi mới bẻ lái
+            
             currentState = pendingTurn; 
             turnPhase = 0;
-            resetEncoders();
-            actionStartTime = currentMillis;
+            actionStartTime = millis(); // Cập nhật lại mốc thời gian sau delay
+            
             if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 90.0);
             else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 90.0);
             else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
@@ -185,9 +186,8 @@ void modeMazeSolver(bool reset) {
                 else currentDir = (currentDir + 2) % 4;
                 currentState = PUSH_THROUGH; 
                 actionStartTime = currentMillis;
-                resetEncoders(); 
             }
-} else {
+        } else {
             turnPhase = 0; 
             int turnSpeed = (error_abs < 25.0) ? 75 : 95; 
 
@@ -206,23 +206,20 @@ void modeMazeSolver(bool reset) {
         return;
     }
 
-    // Sử dụng bộ đếm xung Encoder thay cho timing để đẩy xe thoát khỏi ngã tư
+// Sử dụng timing để đẩy xe thoát khỏi ngã tư
     if (currentState == PUSH_THROUGH) {
-        int pushSpeed = 30 + (currentMillis - actionStartTime) / 4;
+        int pushSpeed = 20 + (currentMillis - actionStartTime) / 4;
         if (pushSpeed > 90) pushSpeed = 90;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
-        // if (currentMillis - actionStartTime > 150 && val != 0) currentState = FOLLOW_LINE;
-        // else if (currentMillis - actionStartTime > 600) currentState = FOLLOW_LINE;
-        if (getEncoderCount() >= 100 && val != 0) {
+        
+        // Thoát ngã tư bằng thời gian (250ms)
+        if (currentMillis - actionStartTime > 250 && val != 0) {
             currentState = FOLLOW_LINE;
-            resetEncoders();
-        } else if (getEncoderCount() >= 400) {
+        } else if (currentMillis - actionStartTime > 800) { // Timeout an toàn 800ms
             currentState = FOLLOW_LINE;
-            resetEncoders();
         }
         return;
     }
-
     if (currentState == REVERSE_TO_NODE) {
         driveWithHeading(-80, current_target_yaw, current_angle, pidStraight); 
         if (currentMillis - actionStartTime > 300 && val == 0) {
@@ -263,7 +260,6 @@ void modeMazeSolver(bool reset) {
                 currentState = REVERSE_TO_NODE; 
                 actionStartTime = millis(); 
                 obstacleCount = 0; 
-                resetEncoders();
                 return;
             }
         } else {
