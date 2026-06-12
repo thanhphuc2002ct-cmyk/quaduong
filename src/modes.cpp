@@ -149,14 +149,12 @@ void modeMazeSolver(bool reset) {
         return;
     }
 
-// Chuyển sang dùng thời gian (millis) để đẩy xe vào tâm ngã tư thay cho Encoder
     if (currentState == NODE_ARRIVED) {
-        int pushSpeed = 20 + (currentMillis - actionStartTime) / 4;
-        if (pushSpeed > 90) pushSpeed = 90;
+        int pushSpeed = 45 + (currentMillis - actionStartTime) / 3;
+        if (pushSpeed > 80) pushSpeed = 80; 
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
         
-        // Chờ 200ms để xe nhích vào đúng tâm ngã tư (có thể tinh chỉnh lại số 200 này)
-        if (currentMillis - actionStartTime >= 200) { 
+        if (currentMillis - actionStartTime >= 250) {
             setMotors(0, 0); 
             delay(150); // Khựng lại 0.15s triệt tiêu quán tính tiến cho xe đứng im phăng phắc rồi mới bẻ lái
             
@@ -164,18 +162,18 @@ void modeMazeSolver(bool reset) {
             turnPhase = 0;
             actionStartTime = millis(); // Cập nhật lại mốc thời gian sau delay
             
-            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 90.0);
-            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 90.0);
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 80.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 80.0);
             else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
     }
 
-    if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
+if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
         float error_val = calculateAngleError(current_target_yaw, current_angle);
         float error_abs = abs(error_val);
         
-        if (error_abs < 4.0) {
+        if (error_abs < 10.0) {
             setMotors(0, 0); 
             if (turnPhase == 0) {
                 turnPhase = 1;
@@ -206,13 +204,11 @@ void modeMazeSolver(bool reset) {
         return;
     }
 
-// Sử dụng timing để đẩy xe thoát khỏi ngã tư
+
     if (currentState == PUSH_THROUGH) {
-        int pushSpeed = 20 + (currentMillis - actionStartTime) / 4;
+        int pushSpeed = 45 + (currentMillis - actionStartTime) / 3;
         if (pushSpeed > 90) pushSpeed = 90;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
-        
-        // Thoát ngã tư bằng thời gian (250ms)
         if (currentMillis - actionStartTime > 250 && val != 0) {
             currentState = FOLLOW_LINE;
         } else if (currentMillis - actionStartTime > 800) { // Timeout an toàn 800ms
@@ -267,21 +263,21 @@ void modeMazeSolver(bool reset) {
         }
 
         switch (val) {
-            case 27: case 17: setMotors(100, 100); break; 
-            case 19: setMotors(90, 100); break; 
-            case 23: setMotors(75, 105); break; 
-            case 7:  setMotors(55, 110); break; 
-            case 15: setMotors(30, 115); break; 
-            case 3:  setMotors(0, 120); break;
-            case 1:  setMotors(-30, 135); break; 
-            case 25: setMotors(100, 90); break; 
-            case 29: setMotors(105, 75); break; 
-            case 28: setMotors(110, 55); break; 
-            case 30: setMotors(115, 30); break; 
-            case 24: setMotors(120, 0); break; 
-            case 16: setMotors(135, -30); break; 
+            case 27: case 17: driveWithHeading(100, current_target_yaw, current_angle, pidStraight); break; 
+            case 19: setMotors(90, 105); break; 
+            case 23: setMotors(75, 110); break; 
+            case 7:  setMotors(55, 115); break; 
+            case 15: setMotors(30, 120); break; 
+            case 3:  setMotors(10, 125); break;
+            case 1:  setMotors(-20, 130); break; 
+            case 25: setMotors(105, 90); break; 
+            case 29: setMotors(110, 75); break; 
+            case 28: setMotors(115, 55); break; 
+            case 30: setMotors(120, 30); break; 
+            case 24: setMotors(125, 10); break; 
+            case 16: setMotors(130, -20); break; 
             case 31: driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
-            default: setMotors(100, 100); break; 
+            default: driveWithHeading(100, current_target_yaw, current_angle, pidStraight); break; 
         }
     }
 }
