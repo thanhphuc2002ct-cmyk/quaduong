@@ -8,7 +8,9 @@ void setMotors(int speedLeft, int speedRight) {
     speedRight = speedRight * SPEED_SCALE;
 
     if (speedLeft > 0) { speedLeft -= 0; if (speedLeft < 0) speedLeft = 0; }
-    else if (speedLeft < 0) { speedLeft += 0; if (speedLeft > 0) speedLeft = 0; }
+    
+    // Bù sai số cơ khí khi lùi: Bánh phải tự quay nhanh hơn nên ta cộng thêm 5 để hãm nó lại (ví dụ từ -80 thành -75)
+    if (speedRight < 0) { speedRight += 2; if (speedRight > 0) speedRight = 0; }
 
     speedLeft = constrain(speedLeft, -255, 255);
     speedRight = constrain(speedRight, -255, 255);

@@ -35,11 +35,11 @@ void loop() {
     }
 
     switch (currentMode) {
-        case MODE_MAZE:         modeMazeSolver(); break;
-        case MODE_OBSTACLE:     modeObstacleAvoidance(); break;
-        case MODE_PICK:         modePickAndDrop(); break;
-        case MODE_CROSSROAD:    modeCrossroad(); break;
-        case MODE_BROKEN_LINE:  modeBrokenLine(); break;
+        case MODE_MAZE:         modeMazeSolver(false); break;
+        case MODE_OBSTACLE:     modeObstacleAvoidance(false); break;
+        case MODE_PICK:         modePickAndDrop(false); break;
+        case MODE_CROSSROAD:    modeCrossroad(false); break;
+        case MODE_BROKEN_LINE:  modeBrokenLine(false); break;
         default:                break;
     }
 }
