@@ -272,19 +272,19 @@ void modeMazeSolver(bool reset) {
 
         switch (val) {
             case 27: case 17: setMotors(100, 100); break; 
-            case 19: setMotors(85, 105); break; 
-            case 23: setMotors(65, 110); break; 
-            case 7:  setMotors(40, 115); break; 
-            case 15: setMotors(10, 125); break; 
-            case 3:  setMotors(-20, 135); break;
-            case 1:  setMotors(-50, 150); break; 
-            case 25: setMotors(105, 85); break; 
-            case 29: setMotors(110, 65); break; 
-            case 28: setMotors(115, 40); break; 
-            case 30: setMotors(125, 10); break; 
-            case 24: setMotors(135, -20); break; 
-            case 16: setMotors(150, -50); break; 
-            case 31: setMotors(70, 70); break; 
+            case 19: setMotors(90, 100); break; 
+            case 23: setMotors(75, 105); break; 
+            case 7:  setMotors(55, 110); break; 
+            case 15: setMotors(30, 115); break; 
+            case 3:  setMotors(0, 120); break;
+            case 1:  setMotors(-30, 135); break; 
+            case 25: setMotors(100, 90); break; 
+            case 29: setMotors(105, 75); break; 
+            case 28: setMotors(110, 55); break; 
+            case 30: setMotors(115, 30); break; 
+            case 24: setMotors(120, 0); break; 
+            case 16: setMotors(135, -30); break; 
+            case 31: driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
             default: setMotors(100, 100); break; 
         }
     }
