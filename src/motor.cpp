@@ -7,14 +7,11 @@ void setMotors(int speedLeft, int speedRight) {
     speedLeft = speedLeft * SPEED_SCALE;
     speedRight = speedRight * SPEED_SCALE;
 
-    if (speedLeft > 0) { speedLeft -= 0; if (speedLeft < 0) speedLeft = 0; }
-    
-    // Bù sai số cơ khí khi lùi: Bánh phải tự quay nhanh hơn nên ta cộng thêm 5 để hãm nó lại (ví dụ từ -80 thành -75)
-    if (speedRight < 0) { speedRight += 3; if (speedRight > 0) speedRight = 0; }
+if (speedLeft > 0) { speedLeft -= 0; if (speedLeft < 0) speedLeft = 0; }
+    else if (speedLeft < 0) { speedLeft += 0; if (speedLeft > 0) speedLeft = 0; }
 
     speedLeft = constrain(speedLeft, -255, 255);
     speedRight = constrain(speedRight, -255, 255);
-
     if (speedLeft > 0) { analogWrite(M3_INA1, 255 - speedLeft); analogWrite(M3_INA2, 255); }
     else if (speedLeft < 0) { analogWrite(M3_INA1, 255); analogWrite(M3_INA2, 255 + speedLeft); }
     else { analogWrite(M3_INA1, 0); analogWrite(M3_INA2, 0); }

@@ -20,6 +20,17 @@ void driveWithHeading(int base_speed, float target, float current, PIDConfig &pi
     float derivative = -current_gyro_rate;
     float correction = (pid.Kp * error) + (pid.Ki * pid.integral) + (pid.Kd * derivative);
     
+    static float current_correction = 0;
+    if (base_speed == 0) {
+        float max_step = 4.0;
+        if (correction > current_correction + max_step) current_correction += max_step;
+        else if (correction < current_correction - max_step) current_correction -= max_step;
+        else current_correction = correction;
+        correction = current_correction;
+    } else {
+        current_correction = correction;
+    }
+
     float left_pwm = base_speed - correction;
     float right_pwm = base_speed + correction;
 
