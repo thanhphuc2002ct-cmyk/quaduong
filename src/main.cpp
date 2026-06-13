@@ -8,8 +8,9 @@
 
 Master comm;
 Peripheral periph;
+extern char remoteCmd;
 
-enum AppMode { MODE_IDLE, MODE_MAZE, MODE_OBSTACLE, MODE_PICK, MODE_CROSSROAD, MODE_BROKEN_LINE };
+enum AppMode { MODE_IDLE, MODE_MAZE, MODE_OBSTACLE, MODE_PICK, MODE_CROSSROAD, MODE_BROKEN_LINE, MODE_REMOTE };
 AppMode currentMode = MODE_IDLE;
 
 void setup() {
@@ -25,13 +26,18 @@ void setup() {
 void loop() {
     int irKey = periph.Get_IR_Code();
     if (irKey != 0) {
-        setMotors(0, 0); 
-        if (irKey == '1') { currentMode = MODE_MAZE; modeMazeSolver(true); Serial.println("-> Chon Mode 1: Giai me cung"); }
-        else if (irKey == '2') { currentMode = MODE_OBSTACLE; modeObstacleAvoidance(true); Serial.println("-> Chon Mode 2: Ne vat can"); }
-        else if (irKey == '3') { currentMode = MODE_PICK; modePickAndDrop(true); Serial.println("-> Chon Mode 3: Gap tha vat"); }
-        else if (irKey == '4') { currentMode = MODE_CROSSROAD; modeCrossroad(true); Serial.println("-> Chon Mode 4: Qua duong"); }
-        else if (irKey == '5') { currentMode = MODE_BROKEN_LINE; modeBrokenLine(true); Serial.println("-> Chon Mode 5: Line dut quang"); }
-        else if (irKey == 'O') { currentMode = MODE_IDLE; Serial.println("-> NGAT HE THONG (IDLE MODE)"); }
+        if (currentMode == MODE_REMOTE && (irKey == 'U' || irKey == 'D' || irKey == 'L' || irKey == 'R')) {
+            remoteCmd = irKey;
+        } else {
+            setMotors(0, 0); 
+            if (irKey == '1') { currentMode = MODE_MAZE; modeMazeSolver(true); Serial.println("-> Chon Mode 1: Giai me cung"); }
+            else if (irKey == '2') { currentMode = MODE_OBSTACLE; modeObstacleAvoidance(true); Serial.println("-> Chon Mode 2: Ne vat can"); }
+            else if (irKey == '3') { currentMode = MODE_PICK; modePickAndDrop(true); Serial.println("-> Chon Mode 3: Gap tha vat"); }
+            else if (irKey == '4') { currentMode = MODE_CROSSROAD; modeCrossroad(true); Serial.println("-> Chon Mode 4: Qua duong"); }
+            else if (irKey == '5') { currentMode = MODE_REMOTE; modeRemoteControl(true); Serial.println("-> Chon Mode 5: Dieu khien Remote"); }
+            else if (irKey == '6') { currentMode = MODE_BROKEN_LINE; modeBrokenLine(true); Serial.println("-> Chon Mode 6: Line dut quang"); }
+            else if (irKey == '0') { currentMode = MODE_IDLE; Serial.println("-> NGAT HE THONG (IDLE MODE)"); }
+        }
     }
 
     switch (currentMode) {
@@ -40,6 +46,7 @@ void loop() {
         case MODE_PICK:         modePickAndDrop(false); break;
         case MODE_CROSSROAD:    modeCrossroad(false); break;
         case MODE_BROKEN_LINE:  modeBrokenLine(false); break;
+        case MODE_REMOTE:       modeRemoteControl(false); break;
         default:                break;
     }
 }

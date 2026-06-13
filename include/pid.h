@@ -16,7 +16,7 @@ extern PIDConfig pidTurn;
 
 
 // PWM tối thiểu để động cơ có thể nhích (bạn có thể tinh chỉnh lại)
-#define MIN_PWM 50 
+#define MIN_PWM 40
 
 void driveWithHeading(int base_speed, float target, float current, PIDConfig &pid);
 

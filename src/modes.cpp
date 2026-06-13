@@ -9,7 +9,7 @@
 #include "pid.h"
 
 extern Master comm;
-
+char remoteCmd = 0;
 // Giải mê cung bằng thuật toán ma trận kết hợp PID góc và PWM thuần túy
 void modeMazeSolver(bool reset) {
     const int MAX_X = 5; 
@@ -65,7 +65,7 @@ void modeMazeSolver(bool reset) {
     
     if (currentState == FOLLOW_LINE && val == 0) {
         setMotors(0, 0);
-        delay(80);
+        delay(500);
         updateAngle(); 
         currentMillis = millis();
 
@@ -137,11 +137,13 @@ void modeMazeSolver(bool reset) {
 
         if (bestDir == currentDir) {
             Serial.println("-> Lua chon: DI THANG");
+            current_target_yaw = current_angle; 
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
         } else {
             currentState = NODE_ARRIVED; 
             actionStartTime = currentMillis;
+            current_target_yaw = current_angle; 
             if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
             else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
             else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
@@ -150,8 +152,8 @@ void modeMazeSolver(bool reset) {
     }
 
 if (currentState == NODE_ARRIVED) {
-        int pushSpeed = 25 + (currentMillis - actionStartTime) / 4;
-        if (pushSpeed > 70) pushSpeed = 70; 
+        int pushSpeed = 60 + (currentMillis - actionStartTime) / 4;
+        if (pushSpeed > 75) pushSpeed = 75; 
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
         
         if (currentMillis - actionStartTime >= 250) {
@@ -163,8 +165,8 @@ if (currentState == NODE_ARRIVED) {
             turnPhase = 0;
             actionStartTime = millis(); // Cập nhật lại mốc thời gian sau delay
             
-            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 60.0);
-            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 60.0);
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 50.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 50.0);
             else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
@@ -176,7 +178,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         
         bool caughtLine = (error_abs < 40.0) && (val == 27 || val == 17 || val == 19 || val == 25 || val == 23 || val == 29);
         
-        if (error_abs < 10.0 || caughtLine) {
+        if (error_abs < 3.0 || caughtLine) {
             setMotors(0, 0); 
             if (turnPhase == 0) {
                 turnPhase = 1;
@@ -203,8 +205,8 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
 
 
     if (currentState == PUSH_THROUGH) {
-        int pushSpeed = 25 + (currentMillis - actionStartTime) / 3;
-        if (pushSpeed > 90) pushSpeed = 90;
+        int pushSpeed = 65 + (currentMillis - actionStartTime) / 3;
+        if (pushSpeed > 85) pushSpeed = 85;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
         if (currentMillis - actionStartTime > 250 && val != 0) {
             currentState = FOLLOW_LINE;
@@ -259,22 +261,102 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
             obstacleCount = 0;
         }
 
-        switch (val) {
-            case 27: case 17: setMotors(100, 100); break; 
-            case 19: setMotors(90, 100); break; 
-            case 23: setMotors(75, 105); break; 
-            case 7:  setMotors(55, 110); break; 
-            case 15: setMotors(30, 115); break; 
-            case 3:  setMotors(0, 120); break;
-            case 1:  setMotors(-30, 135); break; 
-            case 25: setMotors(100, 90); break; 
-            case 29: setMotors(105, 75); break; 
-            case 28: setMotors(110, 55); break; 
-            case 30: setMotors(115, 30); break; 
-            case 24: setMotors(120, 0); break; 
-            case 16: setMotors(135, -30); break; 
+switch (val) {
+            case 27: case 17: setMotors(90, 90); break; 
+            case 19: setMotors(86, 90); break; 
+            case 23: setMotors(78, 90); break; 
+            case 7:  setMotors(55, 95); break; 
+            case 15: setMotors(35, 105); break; 
+            case 3:  setMotors(0, 110); break;
+            case 1:  setMotors(-30, 120); break; 
+            case 25: setMotors(90, 86); break; 
+            case 29: setMotors(90, 78); break; 
+            case 28: setMotors(95, 55); break; 
+            case 30: setMotors(105, 35); break; 
+            case 24: setMotors(110, 0); break; 
+            case 16: setMotors(120, -30); break; 
             case 31: driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
-            default: driveWithHeading(100, current_target_yaw, current_angle, pidStraight); break; 
+            default: driveWithHeading(90, current_target_yaw, current_angle, pidStraight); break; 
+        }
+    }
+}
+
+
+// Điều khiển xe bằng Remote thông qua MPU6050
+void modeRemoteControl(bool reset) {
+    enum RemoteState { IDLE, MOVING_FORWARD, MOVING_BACKWARD, TURNING };
+    static RemoteState state = IDLE;
+    static unsigned long actionStartTime = 0;
+    static float target_yaw = 0.0;
+    static bool isInit = false;
+
+    if (reset) {
+        state = IDLE;
+        actionStartTime = 0;
+        target_yaw = 0.0;
+        isInit = false;
+        remoteCmd = 0;
+        return;
+    }
+
+    if (!isInit) {
+        updateAngle();
+        target_yaw = current_angle;
+        isInit = true;
+    }
+
+    updateAngle();
+    unsigned long currentMillis = millis();
+
+    switch (state) {
+        case IDLE:
+            setMotors(0, 0);
+            if (remoteCmd == 'U') {
+                state = MOVING_FORWARD;
+                target_yaw = current_angle; 
+                actionStartTime = currentMillis;
+                remoteCmd = 0; 
+            } else if (remoteCmd == 'D') {
+                state = MOVING_BACKWARD;
+                target_yaw = current_angle;
+                actionStartTime = currentMillis;
+                remoteCmd = 0;
+            } else if (remoteCmd == 'L') {
+                state = TURNING;
+                target_yaw = normalizeAngle(current_angle + 90.0);
+                remoteCmd = 0;
+            } else if (remoteCmd == 'R') {
+                state = TURNING;
+                target_yaw = normalizeAngle(current_angle - 90.0);
+                remoteCmd = 0;
+            } else {
+                remoteCmd = 0; 
+            }
+            break;
+
+        case MOVING_FORWARD:
+            driveWithHeading(80, target_yaw, current_angle, pidStraight);
+            if (currentMillis - actionStartTime >= 2000) {
+                state = IDLE;
+            }
+            break;
+
+        case MOVING_BACKWARD:
+            driveWithHeading(-80, target_yaw, current_angle, pidStraight);
+            if (currentMillis - actionStartTime >= 2000) {
+                state = IDLE;
+            }
+            break;
+
+        case TURNING: {
+            float error_val = calculateAngleError(target_yaw, current_angle);
+            if (abs(error_val) < 3.0) {
+                setMotors(0, 0);
+                state = IDLE;
+            } else {
+                driveWithHeading(0, target_yaw, current_angle, pidTurn);
+            }
+            break;
         }
     }
 }
