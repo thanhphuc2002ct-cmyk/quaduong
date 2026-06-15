@@ -137,13 +137,13 @@ void modeMazeSolver(bool reset) {
 
         if (bestDir == currentDir) {
             Serial.println("-> Lua chon: DI THANG");
-            current_target_yaw = current_angle; 
+            current_target_yaw = round(current_angle / 90.0) * 90.0; 
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
         } else {
             currentState = NODE_ARRIVED; 
             actionStartTime = currentMillis;
-            current_target_yaw = current_angle; 
+            current_target_yaw = round(current_angle / 90.0) * 90.0; 
             if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
             else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
             else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
@@ -189,7 +189,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
                 else currentDir = (currentDir + 2) % 4;
                 
                 if (caughtLine) {
-                    current_target_yaw = current_angle; 
+                    current_target_yaw = round(current_angle / 90.0) * 90.0; 
                     currentState = FOLLOW_LINE; 
                 } else {
                     currentState = PUSH_THROUGH; 
@@ -247,15 +247,20 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
                 else if (currentDir == 1) currentX--;
                 else if (currentDir == 2) currentY++;
                 else if (currentDir == 3) currentX++;
-
                 Serial.println("-> Lui ve nga tu truoc do de tim duong khac...");
-
-                current_target_yaw = current_angle; 
-
+                current_target_yaw = round(current_angle / 90.0) * 90.0;
                 currentState = REVERSE_TO_NODE; 
-                actionStartTime = millis(); 
-                obstacleCount = 0; 
-                return;
+
+                // currentX = nx;
+                // currentY = ny;
+                // Serial.println("-> Quay dau 180 do ve nga tu truoc do de tim duong khac...");
+                // currentState = TURN_AROUND;
+                // turnPhase = 0;
+                // current_target_yaw = normalizeAngle(round(current_angle / 90.0) * 90.0 + 180.0);
+                
+                // actionStartTime = millis(); 
+                // obstacleCount = 0; 
+                // return;
             }
         } else {
             obstacleCount = 0;

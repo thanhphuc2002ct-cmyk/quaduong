@@ -23,7 +23,7 @@ void driveWithHeading(int base_speed, float target, float current, PIDConfig &pi
 if (base_speed == 0) {
         // Lực cản quét ngang của bánh mắt trâu phía trước rất lớn
         // Cần cộng thêm 20 đơn vị PWM (Castor Kick) vào MIN_PWM để thắng lực lết bánh
-        int castor_deadband = MIN_PWM + 10; 
+        int castor_deadband = MIN_PWM + 14; 
         
         if (abs(error) > 1.5) {
             if (error > 0) correction += castor_deadband;
