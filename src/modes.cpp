@@ -33,7 +33,7 @@ void modeMazeSolver(bool reset) {
         currentX = 0; currentY = 0; currentDir = 0;
         currentState = FOLLOW_LINE; pendingTurn = TURN_RIGHT;
         actionStartTime = 0; turnPhase = 0; obstacleCount = 0;
-        current_target_yaw = 0.0; isInit = false;
+        current_target_yaw = 0.0; current_angle = 0.0; isInit = false;
         return;
     }
 
@@ -138,12 +138,14 @@ void modeMazeSolver(bool reset) {
         if (bestDir == currentDir) {
             Serial.println("-> Lua chon: DI THANG");
             current_target_yaw = round(current_angle / 90.0) * 90.0; 
+            current_angle = current_target_yaw;
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
         } else {
             currentState = NODE_ARRIVED; 
             actionStartTime = currentMillis;
             current_target_yaw = round(current_angle / 90.0) * 90.0; 
+            current_angle = current_target_yaw;
             if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
             else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
             else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
@@ -165,8 +167,8 @@ if (currentState == NODE_ARRIVED) {
             turnPhase = 0;
             actionStartTime = millis(); // Cập nhật lại mốc thời gian sau delay
             
-            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 50.0);
-            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 50.0);
+            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 90.0);
+            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 90.0);
             else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
@@ -178,22 +180,17 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         
         bool caughtLine = (error_abs < 40.0) && (val == 27 || val == 17 || val == 19 || val == 25 || val == 23 || val == 29);
         
-        if (error_abs < 3.0 || caughtLine) {
+        if (error_abs < 3.0 || caughtLine || turnPhase == 1) {
             setMotors(0, 0); 
             if (turnPhase == 0) {
-                turnPhase = 1;
+                turnPhase = 1; // Khóa trạng thái phanh
                 actionStartTime = currentMillis; 
             } else if (currentMillis - actionStartTime >= 100) { 
                 if (currentState == TURN_RIGHT) currentDir = (currentDir + 1) % 4;
                 else if (currentState == TURN_LEFT) currentDir = (currentDir + 3) % 4;
                 else currentDir = (currentDir + 2) % 4;
                 
-                if (caughtLine) {
-                    current_target_yaw = round(current_angle / 90.0) * 90.0; 
-                    currentState = FOLLOW_LINE; 
-                } else {
-                    currentState = PUSH_THROUGH; 
-                }
+                currentState = FOLLOW_LINE; 
                 actionStartTime = currentMillis;
             }
         } else {
@@ -219,6 +216,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         driveWithHeading(-80, current_target_yaw, current_angle, pidStraight); 
         if (currentMillis - actionStartTime > 300 && val == 0) {
             setMotors(0, 0);
+            current_angle = current_target_yaw;
             delay(50); 
             currentState = FOLLOW_LINE; 
         }
