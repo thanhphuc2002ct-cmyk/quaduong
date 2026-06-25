@@ -10,6 +10,34 @@
 
 extern Master comm;
 char remoteCmd = 0;
+
+// Đọc khoảng cách từ cảm biến siêu âm HC-SR04 với timeout chống treo
+long getSonarDistance() {
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    
+    long duration = pulseIn(ECHO_PIN, HIGH, 30000); 
+    
+    static long lastValidDist = 999;
+    static int errorCount = 0;
+
+    if (duration == 0) {
+        errorCount++;
+        if (errorCount >= 2) {
+            lastValidDist = 999;
+        }
+        return lastValidDist; 
+    }
+
+    errorCount = 0; 
+    long dist = duration * 0.034 / 2;
+    lastValidDist = dist;
+    return dist;
+}
+
 // Giải mê cung bằng thuật toán ma trận kết hợp PID góc và PWM thuần túy
 void modeMazeSolver(bool reset) {
     const int MAX_X = 5; 
@@ -56,14 +84,14 @@ void modeMazeSolver(bool reset) {
         lastI2CPoll = currentMillis;
     }
 
-    uint8_t rx_data[2] = {255, 255}; 
-    comm.I2CrequestFrom(I2C_ADDR, 2, rx_data); 
-    if (rx_data[0] == 255 && rx_data[1] == 255) return; 
+    uint8_t raw_val = 255; 
+    comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val); 
+    if (raw_val == 255) return; 
 
-    long currentDistance = (long)rx_data[0];     
-    uint8_t val = (~rx_data[1]) & 0x1F;        
+    long currentDistance = getSonarDistance();     
+    uint8_t val = raw_val & 0x1F;        
     
-    if (currentState == FOLLOW_LINE && val == 0) {
+    if (currentState == FOLLOW_LINE && val == 31) {
         setMotors(0, 0);
         delay(500);
         updateAngle(); 
@@ -178,7 +206,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         float error_val = calculateAngleError(current_target_yaw, current_angle);
         float error_abs = abs(error_val);
         
-        bool caughtLine = (error_abs < 40.0) && (val == 27 || val == 17 || val == 19 || val == 25 || val == 23 || val == 29);
+        bool caughtLine = (error_abs < 40.0) && (val == 4 || val == 14 || val == 12 || val == 6 || val == 8 || val == 2);
         
         if (error_abs < 3.0 || caughtLine || turnPhase == 1) {
             setMotors(0, 0); 
@@ -205,7 +233,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         int pushSpeed = 65 + (currentMillis - actionStartTime) / 3;
         if (pushSpeed > 85) pushSpeed = 85;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
-        if (currentMillis - actionStartTime > 250 && val != 0) {
+        if (currentMillis - actionStartTime > 250 && val != 31) {
             currentState = FOLLOW_LINE;
         } else if (currentMillis - actionStartTime > 800) { // Timeout an toàn 800ms
             currentState = FOLLOW_LINE;
@@ -214,7 +242,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
     }
     if (currentState == REVERSE_TO_NODE) {
         driveWithHeading(-80, current_target_yaw, current_angle, pidStraight); 
-        if (currentMillis - actionStartTime > 300 && val == 0) {
+        if (currentMillis - actionStartTime > 300 && val == 31) {
             setMotors(0, 0);
             current_angle = current_target_yaw;
             delay(50); 
@@ -265,20 +293,20 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         }
 
 switch (val) {
-            case 27: case 17: setMotors(90, 90); break; 
-            case 19: setMotors(86, 90); break; 
-            case 23: setMotors(78, 90); break; 
-            case 7:  setMotors(55, 95); break; 
-            case 15: setMotors(35, 105); break; 
-            case 3:  setMotors(0, 110); break;
-            case 1:  setMotors(-30, 120); break; 
-            case 25: setMotors(90, 86); break; 
-            case 29: setMotors(90, 78); break; 
-            case 28: setMotors(95, 55); break; 
-            case 30: setMotors(105, 35); break; 
-            case 24: setMotors(110, 0); break; 
-            case 16: setMotors(120, -30); break; 
-            case 31: driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
+            case 4: case 14: setMotors(90, 90); break; 
+            case 12: setMotors(86, 90); break; 
+            case 8:  setMotors(78, 90); break; 
+            case 24: setMotors(55, 95); break; 
+            case 16: setMotors(35, 105); break; 
+            case 28: setMotors(0, 110); break;
+            case 30: setMotors(-30, 120); break; 
+            case 6:  setMotors(90, 86); break; 
+            case 2:  setMotors(90, 78); break; 
+            case 3:  setMotors(95, 55); break; 
+            case 1:  setMotors(105, 35); break; 
+            case 7:  setMotors(110, 0); break; 
+            case 15: setMotors(120, -30); break; 
+            case 0:  driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
             default: driveWithHeading(90, current_target_yaw, current_angle, pidStraight); break; 
         }
     }
@@ -338,14 +366,14 @@ void modeRemoteControl(bool reset) {
             break;
 
         case MOVING_FORWARD:
-            driveWithHeading(80, target_yaw, current_angle, pidStraight);
+            driveWithHeading(120, target_yaw, current_angle, pidStraight);
             if (currentMillis - actionStartTime >= 2000) {
                 state = IDLE;
             }
             break;
 
         case MOVING_BACKWARD:
-            driveWithHeading(-80, target_yaw, current_angle, pidStraight);
+            driveWithHeading(-120, target_yaw, current_angle, pidStraight);
             if (currentMillis - actionStartTime >= 2000) {
                 state = IDLE;
             }
@@ -364,55 +392,59 @@ void modeRemoteControl(bool reset) {
     }
 }
 
-// Bám vạch hành trình và dừng khẩn cấp khi phát hiện chướng ngại vật phía trước
 void modeObstacleAvoidance(bool reset) {
     enum ObstacleState { FOLLOW, OBSTACLE };
     static ObstacleState state = FOLLOW;
     static unsigned long lastI2C = 0;
-    static uint8_t lastVal = 27; 
+    static uint8_t lastVal = 4; 
+
+    // Lấy biến siêu âm đã được quét sẵn từ main.cpp sang dùng
+    extern long current_distance; 
 
     if (reset) {
-        state = FOLLOW; lastI2C = 0; lastVal = 27;
+        state = FOLLOW; lastI2C = 0; lastVal = 4;
         return;
     }
     
     unsigned long currentMillis = millis();
+
+    if (current_distance > 0 && current_distance <= 18) {
+        setMotors(0, 0);
+        state = OBSTACLE;
+        return; 
+    } else {
+        if (state == OBSTACLE) state = FOLLOW;
+    }
+
     if (currentMillis - lastI2C < 10) return;
     lastI2C = currentMillis;
 
-    uint8_t rx_data[2] = {255, 255};
-    comm.I2CrequestFrom(I2C_ADDR, 2, rx_data);
-    if (rx_data[0] == 255 && rx_data[1] == 255) return;
+    uint8_t raw_val = 255;
+    comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
+    if (raw_val == 255) return;
 
-    long distance = (long)rx_data[0]; 
-    uint8_t val = (~rx_data[1] & 0x1F); 
+    uint8_t val = raw_val & 0x1F; 
 
-    if (val == 31) val = lastVal;
+    if (val == 0) val = lastVal;
     else lastVal = val;
 
-    if (distance > 0 && distance <= 10) {
-        setMotors(0, 0);
-        state = OBSTACLE;
-    } else {
-        if (state == OBSTACLE) state = FOLLOW;
-
-        if (state == FOLLOW) {
-            switch (val) {
-                case 27: case 17: case 0: setMotors(70, 65); break;
-                case 19: setMotors(65, 70); break; 
-                case 23: setMotors(45, 70); break; 
-                case 7:  setMotors(20, 95); break; 
-                case 15: setMotors(-30, 105); break;
-                case 3:  setMotors(-50, 125); break;
-                case 1:  setMotors(-70, 135); break;
-                case 25: setMotors(75, 60); break; 
-                case 29: setMotors(75, 40); break; 
-                case 28: setMotors(100, 15); break; 
-                case 30: setMotors(110, -35); break; 
-                case 24: setMotors(130, -55); break; 
-                case 16: setMotors(140, -75); break; 
-                default: setMotors(70, 65); break;
-            }
+    if (state == FOLLOW) {
+        switch (val) {
+            case 4: case 14: setMotors(90, 90); break; 
+            case 12: setMotors(86, 90); break; 
+            case 8:  setMotors(78, 90); break; 
+            case 24: setMotors(55, 95); break; 
+            case 16: setMotors(0, 125); break; 
+            case 28: setMotors(0, 110); break;
+            case 30: setMotors(0, 120); break; 
+            case 6:  setMotors(90, 86); break; 
+            case 2:  setMotors(90, 78); break; 
+            case 3:  setMotors(95, 55); break; 
+            case 1:  setMotors(125, 0); break; 
+            case 7:  setMotors(110, 0); break; 
+            case 15: setMotors(120, 0); break; 
+            case 31: setMotors(80, 80); break; 
+            default: setMotors(90, 90); break; 
         }
     }
 }
@@ -424,7 +456,7 @@ void modePickAndDrop(bool reset) {
     static unsigned long lastI2C = 0; 
     static bool hasObject = false;
     static unsigned long actionTime = 0;
-    static uint8_t lastVal = 27; 
+    static uint8_t lastVal = 4; 
     static int detectCount = 0;
     static float drop_target_yaw = 0.0;
     static int turnPhase = 0;
@@ -433,7 +465,7 @@ void modePickAndDrop(bool reset) {
 
     if (reset) {
         state = FOLLOW; lastI2C = 0; hasObject = false; actionTime = 0;
-        lastVal = 27; detectCount = 0; drop_target_yaw = 0.0; turnPhase = 0;
+        lastVal = 4; detectCount = 0; drop_target_yaw = 0.0; turnPhase = 0;
         isInit = false;
         return;
     }
@@ -441,7 +473,7 @@ void modePickAndDrop(bool reset) {
     if (!isInit) {
         ESP32PWM::allocateTimer(0);
         gripper.setPeriodHertz(50);
-        gripper.attach(38, 500, 2400); 
+        gripper.attach(48, 500, 2400); 
         gripper.write(0); 
         isInit = true;
     }
@@ -478,12 +510,12 @@ void modePickAndDrop(bool reset) {
     if (currentMillis - lastI2C < 10) return;
     lastI2C = currentMillis;
 
-    uint8_t rx_data[2] = {255, 255};
-    comm.I2CrequestFrom(I2C_ADDR, 2, rx_data);
-    if (rx_data[0] == 255 && rx_data[1] == 255) return;
+    uint8_t raw_val = 255;
+    comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
+    if (raw_val == 255) return;
 
-    long distance = (long)rx_data[0];
-    uint8_t val = (~rx_data[1] & 0x1F);
+    long distance = getSonarDistance();
+    uint8_t val = raw_val & 0x1F;
 
     if (state == PICKING_UP) {
         setMotors(0, 0);
@@ -507,7 +539,7 @@ void modePickAndDrop(bool reset) {
         return;
     }
 
-    if (val == 31) val = lastVal;
+    if (val == 0) val = lastVal;
     else lastVal = val;
 
     if (!hasObject && distance > 0 && distance <= 10) {
@@ -522,7 +554,7 @@ void modePickAndDrop(bool reset) {
         detectCount = 0;
     }
 
-    if (val == 0) {
+    if (val == 31) {
         if (hasObject) {
             drop_target_yaw = normalizeAngle(current_angle - 90.0);
             state = TURN_RIGHT_DROP;
@@ -532,32 +564,60 @@ void modePickAndDrop(bool reset) {
             setMotors(70, 65);
         }
     } else {
-        switch (val) {
-            case 27: case 17: setMotors(70, 65); break;
-            case 19: setMotors(65, 70); break; 
-            case 23: setMotors(45, 70); break; 
-            case 7:  setMotors(20, 95); break;
-            case 15: setMotors(-30, 105); break; 
-            case 3:  setMotors(-50, 125); break;
-            case 1:  setMotors(-70, 135); break;
-            case 25: setMotors(75, 60); break; 
-            case 29: setMotors(75, 40); break; 
-            case 28: setMotors(100, 15); break; 
-            case 30: setMotors(110, -35); break;
-            case 24: setMotors(130, -55); break; 
-            case 16: setMotors(140, -75); break; 
-            default: setMotors(70, 65); break;
-        }
+switch (val) {
+                case 4: case 14: case 31: setMotors(80, 80); break;
+                case 12: setMotors(75, 80); break; 
+                case 8:  setMotors(55, 80); break; 
+                case 24: setMotors(30, 105); break; 
+                case 16: setMotors(-40, 115); break;
+                case 28: setMotors(-60, 135); break;
+                case 30: setMotors(-80, 145); break;
+                case 6:  setMotors(85, 70); break; 
+                case 2:  setMotors(85, 50); break; 
+                case 3:  setMotors(110, 25); break; 
+                case 1:  setMotors(120, -45); break; 
+                case 7:  setMotors(140, -65); break; 
+                case 15: setMotors(150, -85); break; 
+                default: setMotors(80, 80); break;
+            }
     }
 }
 // Đếm vạch ngang giao lộ và phản hồi tín hiệu âm thanh kết hợp chớp LED đa sắc
-void modeCrossroad(bool reset) {
-    const int CROSS_BUZZER_PIN = 48;
-    const int CROSS_LED_PIN = 38;
-    const int CROSS_NUMPIXELS = 1;
-    const int CROSS_START_MARK = 0; 
+const int CROSS_LED_PIN = 38;
+const int CROSS_NUMPIXELS = 8;
+Adafruit_NeoPixel pixels(CROSS_NUMPIXELS, CROSS_LED_PIN, NEO_GRB + NEO_KHZ800);
 
-    enum IndState { IDLE, BEEPING_STRIPE, IND_BLINKING_END };
+void initCrossroadLED() {
+    pixels.begin();
+    pixels.setBrightness(50);
+    pixels.clear();
+    pixels.show();
+}
+
+void triggerModeChangeSequence() {
+    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.show(); delay(150);
+    pixels.clear(); pixels.show();
+}
+
+void triggerStartSequence() {
+    setMotors(0, 0);
+    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.show(); delay(150);
+    pixels.clear(); pixels.show(); delay(150);
+    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.show(); delay(150);
+    pixels.clear(); pixels.show(); delay(150);
+    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(0, 255, 0));
+    pixels.show(); delay(250);
+    pixels.clear(); pixels.show(); delay(150);
+    
+    extern unsigned long prev_time;
+    prev_time = micros(); // Xóa tích lũy thời gian ảo do delay gây ra
+}
+
+void modeCrossroad(bool reset) {
+    enum IndState { IDLE, IND_BLINKING_END };
     enum RobotState { RUNNING, PAUSING_STRIPE, PAUSING_END, BLINKING_END, CROSSING_LINE };
     
     static IndState indState = IDLE;
@@ -565,68 +625,55 @@ void modeCrossroad(bool reset) {
     static unsigned long indPrevMillis = 0;
     static int blinkCount = 0;
     static bool ledState = false;
-    static int targetBeeps = 0;
-    static int currentBeepCount = 0;
-    static bool isBeepOn = false;
     static uint16_t stripeCount = 0;
     static uint8_t lastVal = 255;
-    static bool sawMark27 = false;
-    static bool enableLed = false;
     static unsigned long prevMillis = 0;
     static unsigned long lastI2C = 0;
-    static Adafruit_NeoPixel pixels(CROSS_NUMPIXELS, CROSS_LED_PIN, NEO_GRB + NEO_KHZ800);
-    static bool isInit = false;
+    static float cross_target_yaw = 0.0;
+    static int phase = 0; 
+    static int dirMode = 0; 
+    static bool readyToStart = false; 
+    static bool isInit = false; // Thêm cờ khởi tạo góc chuẩn
 
     if (reset) {
         indState = IDLE; state = RUNNING; indPrevMillis = 0; blinkCount = 0;
-        ledState = false; targetBeeps = 0; currentBeepCount = 0; isBeepOn = false;
-        stripeCount = 0; lastVal = 255; sawMark27 = false; enableLed = false;
-        prevMillis = 0; lastI2C = 0; isInit = false;
+        ledState = false; stripeCount = 0; lastVal = 255;
+        prevMillis = 0; lastI2C = 0; 
+        phase = 0; dirMode = 0; readyToStart = false;
+        isInit = false; // Reset lại cờ khi reset mode
+        
+        updateAngle();
+        cross_target_yaw = current_angle; 
+        
+        pixels.clear();
+        pixels.show(); 
         return;
     }
 
+    // LẤY GÓC HIỆN TẠI LÀM TIÊU CHUẨN NGAY KHI VÀO MODE
     if (!isInit) {
-        pinMode(CROSS_BUZZER_PIN, OUTPUT);
-        digitalWrite(CROSS_BUZZER_PIN, LOW);
-        pixels.begin();
-        pixels.clear();
-        pixels.show();
+        updateAngle();
+        cross_target_yaw = current_angle;
         isInit = true;
     }
 
+    updateAngle();
     unsigned long currentMillis = millis();
 
-    if (indState == BEEPING_STRIPE) {
-        if (currentMillis - indPrevMillis >= 100) {
-            indPrevMillis = currentMillis;
-            if (isBeepOn) {
-                digitalWrite(CROSS_BUZZER_PIN, LOW);
-                isBeepOn = false;
-                currentBeepCount++;
-                if (currentBeepCount >= targetBeeps) indState = IDLE;
-            } else {
-                digitalWrite(CROSS_BUZZER_PIN, HIGH);
-                isBeepOn = true;
-            }
-        }
-    } 
-    else if (indState == IND_BLINKING_END) {
+    if (indState == IND_BLINKING_END) {
         if (currentMillis - indPrevMillis >= 500) {
             indPrevMillis = currentMillis;
             ledState = !ledState; 
             if (ledState) {
-                pixels.setPixelColor(0, pixels.Color(255, 255, 255));
-                digitalWrite(CROSS_BUZZER_PIN, HIGH);
+                for(int i = 0; i < CROSS_NUMPIXELS; i++) pixels.setPixelColor(i, pixels.Color(255, 255, 255));
             } else {
                 pixels.clear();
-                digitalWrite(CROSS_BUZZER_PIN, LOW);
             }
             pixels.show();
             blinkCount++;
-            if (blinkCount >= 20) {
+            if (blinkCount >= 10) { 
                 pixels.clear();
                 pixels.show();
-                digitalWrite(CROSS_BUZZER_PIN, LOW);
                 indState = IDLE;
             }
         }
@@ -634,100 +681,161 @@ void modeCrossroad(bool reset) {
 
     switch (state) {
         case PAUSING_STRIPE:
-            if (currentMillis - prevMillis >= 3000) {
+            if (currentMillis - prevMillis >= 2000) {
                 state = CROSSING_LINE;
-                setMotors(45, 40);
-                prevMillis = currentMillis;
             }
             return;
+            
         case PAUSING_END:
             if (currentMillis - prevMillis >= 10000) {
                 state = CROSSING_LINE;
-                setMotors(45, 40);
                 prevMillis = currentMillis;
             }
             return;
+            
         case BLINKING_END:
+            setMotors(0, 0);
             if (indState != IND_BLINKING_END) {
-                enableLed = false;
-                state = CROSSING_LINE;
-                setMotors(45, 40);
-                prevMillis = currentMillis;
+                state = PAUSING_END;
+                prevMillis = currentMillis + 9999999; 
             }
             return;
+            
         case CROSSING_LINE:
-            if (currentMillis - prevMillis >= 400) state = RUNNING;
+            driveWithHeading(100, cross_target_yaw, current_angle, pidStraight);
+            
+            if (currentMillis - lastI2C >= 10) {
+                lastI2C = currentMillis;
+                uint8_t raw_val = 255;
+                comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
+                
+                if (raw_val != 255) {
+                    uint8_t val = raw_val & 0x1F;  
+                    if (val != 0) { 
+                        state = RUNNING; 
+                        lastVal = val;
+                    }
+                }
+            }
             return;
-        case RUNNING:
+            
+case RUNNING:
             if (currentMillis - lastI2C < 10) return;
             lastI2C = currentMillis;
 
             uint8_t raw_val = 255; 
             comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
             if (raw_val == 255) return;
-            uint8_t val = raw_val & 0x1F; 
+            uint8_t val = raw_val & 0x1F;  
 
-            if (val == CROSS_START_MARK && !enableLed) enableLed = true;
-            if (val == 27) sawMark27 = true;
-            else if (val == 31) sawMark27 = false; 
+            bool isMidLine = ((val & 0x0E) != 0) && ((val & 0x11) == 0);
+            
+            if (isMidLine) {
+                if (!readyToStart && phase == 0) {
+                    readyToStart = true;
+                }
+            }
 
-            if (val == 0 && lastVal != 0) { 
-                setMotors(0, 0);
-                if (sawMark27) {
+            if (phase == 1 && val != 0) {
+                if (val == 31) { 
+                    dirMode = 2;
+                    phase = 2;
                     stripeCount = 0; 
-                    if (enableLed) {
-                        state = BLINKING_END;
-                        indState = IND_BLINKING_END;
-                        blinkCount = 0;
-                        ledState = true;
-                        indPrevMillis = currentMillis;
-                        pixels.setPixelColor(0, pixels.Color(255, 255, 255));
-                        pixels.show();
-                        digitalWrite(CROSS_BUZZER_PIN, HIGH);
-                    } else {
-                        state = PAUSING_END;
-                        prevMillis = currentMillis; 
+                } else if (isMidLine) { 
+                    dirMode = 1;
+                    phase = 2; 
+                    stripeCount = 0; 
+                }
+            }
+
+            if (phase == 4 && val != 0) {
+                if (isMidLine || val == 31) { 
+                    dirMode = 2;
+                    phase = 2;
+                    stripeCount = 0; 
+                } else if (isMidLine) { 
+                    dirMode = 1;
+                    phase = 2; 
+                    stripeCount = 0; 
+                }
+            }
+
+            if (phase == 4 && val != 31) {
+                if (isMidLine || val == 0) {
+                    setMotors(0, 0);
+                    state = BLINKING_END;
+                    indState = IND_BLINKING_END;
+                    blinkCount = 0;
+                    ledState = true;
+                    indPrevMillis = currentMillis;
+                    for(int i = 0; i < CROSS_NUMPIXELS; i++) pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+                    pixels.show();
+                    phase = 5; 
+                }
+            }
+
+            if (val == 31 && lastVal != 31) { 
+                if (phase == 0) {
+                    if (readyToStart) {
+                        phase = 1;
+                        readyToStart = false; 
                     }
-                    sawMark27 = false;
-                } 
-                else {
-                    if (enableLed) {
+                }
+                else if (phase == 2) {
+                    if (stripeCount < 7) {
+                        setMotors(0, 0); 
                         stripeCount++;
-                        targetBeeps = stripeCount;
-                        currentBeepCount = 0;
-                        isBeepOn = true;
-                        digitalWrite(CROSS_BUZZER_PIN, HIGH);
-                        indState = BEEPING_STRIPE;
-                        indPrevMillis = currentMillis;
                         
-                        pixels.clear();
-                        if (stripeCount == 1) pixels.setPixelColor(0, pixels.Color(255, 0, 0));
-                        else if (stripeCount == 2) pixels.setPixelColor(0, pixels.Color(0, 255, 0));
-                        else if (stripeCount == 3) pixels.setPixelColor(0, pixels.Color(255, 255, 0));
-                        else if (stripeCount == 4) pixels.setPixelColor(0, pixels.Color(0, 0, 255));
-                        else if (stripeCount == 5) pixels.setPixelColor(0, pixels.Color(128, 0, 128));
-                        else pixels.setPixelColor(0, pixels.Color(0, 255, 255));
+                        uint32_t color = 0;
+                        if (dirMode == 1) {
+                            switch (stripeCount) {
+                                case 1: color = pixels.Color(255, 0, 0); break;
+                                case 2: color = pixels.Color(0, 255, 0); break;
+                                case 3: color = pixels.Color(255, 255, 0); break;
+                                case 4: color = pixels.Color(0, 0, 255); break;
+                                case 5: color = pixels.Color(255, 0, 255); break;
+                                case 6: color = pixels.Color(0, 255, 255); break;
+                                case 7: color = pixels.Color(255, 255, 255); break;
+                            }
+                        } else {
+                            switch (stripeCount) {
+                                case 1: color = pixels.Color(255, 80, 0); break;
+                                case 2: color = pixels.Color(0, 255, 128); break;
+                                case 3: color = pixels.Color(0, 255, 0); break;
+                                case 4: color = pixels.Color(255, 165, 0); break;
+                                case 5: color = pixels.Color(255, 105, 180); break;
+                                case 6: color = pixels.Color(0, 128, 255); break;
+                                case 7: color = pixels.Color(128, 128, 128); break;
+                            }
+                        }
+                        pixels.setPixelColor(stripeCount - 1, color);
                         pixels.show();
+                        state = PAUSING_STRIPE;
+                        prevMillis = currentMillis;
+                        
+                        if (stripeCount == 7) {
+                            phase = 3; 
+                        }
                     }
-                    state = PAUSING_STRIPE;
-                    prevMillis = currentMillis; 
+                }
+                else if (phase == 3) {
+                    phase = 4;
                 }
             } 
-            else if (val != 0) {
-                setMotors(45, 40);
+
+            if (state == RUNNING) {
+                driveWithHeading(80, cross_target_yaw, current_angle, pidStraight);
             }
             lastVal = val;
-            break; 
+            break;
     }
 }
-
-// Duy trì vết di chuyển bằng bộ nhớ trạng thái khi xe đi qua đoạn mất line hoặc cầu gãy
 void modeBrokenLine(bool reset) {
     static unsigned long lastI2C = 0; 
-    static uint8_t lastVal = 27;
+    static uint8_t lastVal = 4;
 
     if (reset) {
-        lastI2C = 0; lastVal = 27;
+        lastI2C = 0; lastVal = 4;
         return;
     }
 
@@ -738,25 +846,25 @@ void modeBrokenLine(bool reset) {
     uint8_t raw_val = 255; 
     comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
     if (raw_val == 255) return;
-    uint8_t val = raw_val & 0x1F; 
-
-    if (val == 31) val = lastVal;
+    uint8_t val = raw_val & 0x1F;  
+    if (val == 0) val = lastVal;
     else lastVal = val;
 
-    switch (val) {
-        case 27: case 17: case 0: setMotors(60, 55); break;
-        case 19: setMotors(50, 60); break; 
-        case 23: setMotors(35, 75); break; 
-        case 7:  setMotors(0, 105); break; 
-        case 15: setMotors(-30, 125); break;
-        case 3:  setMotors(-50, 145); break;
-        case 1:  setMotors(-70, 155); break;
-        case 25: setMotors(65, 45); break; 
-        case 29: setMotors(80, 25); break; 
-        case 28: setMotors(110, -5); break; 
-        case 30: setMotors(130, -35); break;
-        case 24: setMotors(150, -55); break;
-        case 16: setMotors(160, -75); break;
-        default: setMotors(60, 55); break;
-    }
+        switch (val) {
+            case 4: case 14: setMotors(90, 90); break; 
+            case 12: setMotors(86, 90); break; 
+            case 8:  setMotors(78, 90); break; 
+            case 24: setMotors(55, 95); break; 
+            case 16: setMotors(0, 125); break; 
+            case 28: setMotors(0, 110); break;
+            case 30: setMotors(0, 120); break; 
+            case 6:  setMotors(90, 86); break; 
+            case 2:  setMotors(90, 78); break; 
+            case 3:  setMotors(95, 55); break; 
+            case 1:  setMotors(125, 0); break; 
+            case 7:  setMotors(110, 0); break; 
+            case 15: setMotors(120, 0); break; 
+            case 31: setMotors(80, 80); break; 
+            default: setMotors(90, 90); break; 
+        }
 }

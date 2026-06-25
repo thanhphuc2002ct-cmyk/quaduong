@@ -9,15 +9,18 @@
 #define MPU_SDA_PIN 1
 #define MPU_SCL_PIN 2
 // --- Chân điều khiển động cơ ---
-// #define M3_INA1 5
-// #define M3_INA2 4
-// #define M4_INA1 7
-// #define M4_INA2 6
-#define M3_INA1 16
-#define M3_INA2 15
-#define M4_INA1 18
-#define M4_INA2 17
+#define M4_INA1 4
+#define M4_INA2 5
+#define M3_INA1 6
+#define M3_INA2 7
+// #define M3_INA1 16
+// #define M3_INA2 15
+// #define M4_INA1 18
+// #define M4_INA2 17
+#define BUTTON_PIN 47
 
+#define TRIG_PIN 14
+#define ECHO_PIN 21
 // Tốc độ mặc định
 #define SPEED_DEFAULT 150
 // Hệ số tốc độ toàn cục: 1.0 (100% gốc), 0.9 (giảm 10%), 0.5 (giảm một nửa)
