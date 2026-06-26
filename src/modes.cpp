@@ -84,14 +84,13 @@ void modeMazeSolver(bool reset) {
         lastI2CPoll = currentMillis;
     }
 
-    uint8_t raw_val = 255; 
+    uint8_t raw_val = 0; 
     comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val); 
-    if (raw_val == 255) return; 
 
     long currentDistance = getSonarDistance();     
-    uint8_t val = raw_val & 0x1F;        
+    uint8_t val = raw_val & 0x0F;        
     
-    if (currentState == FOLLOW_LINE && val == 31) {
+    if (currentState == FOLLOW_LINE && val == 15) {
         setMotors(0, 0);
         delay(500);
         updateAngle(); 
@@ -206,7 +205,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         float error_val = calculateAngleError(current_target_yaw, current_angle);
         float error_abs = abs(error_val);
         
-        bool caughtLine = (error_abs < 40.0) && (val == 4 || val == 14 || val == 12 || val == 6 || val == 8 || val == 2);
+        bool caughtLine = (error_abs < 40.0) && (val == 6 || val == 4 || val == 2 || val == 12 || val == 3);
         
         if (error_abs < 3.0 || caughtLine || turnPhase == 1) {
             setMotors(0, 0); 
@@ -233,7 +232,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         int pushSpeed = 65 + (currentMillis - actionStartTime) / 3;
         if (pushSpeed > 85) pushSpeed = 85;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
-        if (currentMillis - actionStartTime > 250 && val != 31) {
+        if (currentMillis - actionStartTime > 250 && val != 15) {
             currentState = FOLLOW_LINE;
         } else if (currentMillis - actionStartTime > 800) { // Timeout an toàn 800ms
             currentState = FOLLOW_LINE;
@@ -242,7 +241,7 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
     }
     if (currentState == REVERSE_TO_NODE) {
         driveWithHeading(-80, current_target_yaw, current_angle, pidStraight); 
-        if (currentMillis - actionStartTime > 300 && val == 31) {
+        if (currentMillis - actionStartTime > 300 && val == 15) {
             setMotors(0, 0);
             current_angle = current_target_yaw;
             delay(50); 
@@ -293,19 +292,14 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
         }
 
 switch (val) {
-            case 4: case 14: setMotors(90, 90); break; 
-            case 12: setMotors(86, 90); break; 
-            case 8:  setMotors(78, 90); break; 
-            case 24: setMotors(55, 95); break; 
-            case 16: setMotors(35, 105); break; 
-            case 28: setMotors(0, 110); break;
-            case 30: setMotors(-30, 120); break; 
-            case 6:  setMotors(90, 86); break; 
-            case 2:  setMotors(90, 78); break; 
-            case 3:  setMotors(95, 55); break; 
-            case 1:  setMotors(105, 35); break; 
-            case 7:  setMotors(110, 0); break; 
-            case 15: setMotors(120, -30); break; 
+            case 6:  setMotors(90, 90); break; 
+            case 4:  setMotors(90, 86); break; 
+            case 12: setMotors(95, 55); break; 
+            case 8:  setMotors(110, 0); break; 
+            case 2:  setMotors(86, 90); break; 
+            case 3:  setMotors(55, 95); break; 
+            case 1:  setMotors(0, 110); break; 
+            case 15: driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
             case 0:  driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
             default: driveWithHeading(90, current_target_yaw, current_angle, pidStraight); break; 
         }
@@ -396,13 +390,13 @@ void modeObstacleAvoidance(bool reset) {
     enum ObstacleState { FOLLOW, OBSTACLE };
     static ObstacleState state = FOLLOW;
     static unsigned long lastI2C = 0;
-    static uint8_t lastVal = 4; 
+    static uint8_t lastVal = 6; 
 
     // Lấy biến siêu âm đã được quét sẵn từ main.cpp sang dùng
     extern long current_distance; 
 
     if (reset) {
-        state = FOLLOW; lastI2C = 0; lastVal = 4;
+        state = FOLLOW; lastI2C = 0; lastVal = 6;
         return;
     }
     
@@ -419,31 +413,24 @@ void modeObstacleAvoidance(bool reset) {
     if (currentMillis - lastI2C < 10) return;
     lastI2C = currentMillis;
 
-    uint8_t raw_val = 255;
+    uint8_t raw_val = 0;
     comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-    if (raw_val == 255) return;
 
-    uint8_t val = raw_val & 0x1F; 
+    uint8_t val = raw_val & 0x0F; 
 
     if (val == 0) val = lastVal;
     else lastVal = val;
 
     if (state == FOLLOW) {
         switch (val) {
-            case 4: case 14: setMotors(90, 90); break; 
-            case 12: setMotors(86, 90); break; 
-            case 8:  setMotors(78, 90); break; 
-            case 24: setMotors(55, 95); break; 
-            case 16: setMotors(0, 125); break; 
-            case 28: setMotors(0, 110); break;
-            case 30: setMotors(0, 120); break; 
-            case 6:  setMotors(90, 86); break; 
-            case 2:  setMotors(90, 78); break; 
-            case 3:  setMotors(95, 55); break; 
-            case 1:  setMotors(125, 0); break; 
-            case 7:  setMotors(110, 0); break; 
-            case 15: setMotors(120, 0); break; 
-            case 31: setMotors(80, 80); break; 
+            case 6:  setMotors(90, 90); break; 
+            case 4:  setMotors(90, 86); break; 
+            case 12: setMotors(95, 55); break; 
+            case 8:  setMotors(110, 0); break; 
+            case 2:  setMotors(86, 90); break; 
+            case 3:  setMotors(55, 95); break; 
+            case 1:  setMotors(0, 110); break; 
+            case 15: setMotors(80, 80); break; 
             default: setMotors(90, 90); break; 
         }
     }
@@ -456,7 +443,7 @@ void modePickAndDrop(bool reset) {
     static unsigned long lastI2C = 0; 
     static bool hasObject = false;
     static unsigned long actionTime = 0;
-    static uint8_t lastVal = 4; 
+    static uint8_t lastVal = 6; 
     static int detectCount = 0;
     static float drop_target_yaw = 0.0;
     static int turnPhase = 0;
@@ -465,7 +452,7 @@ void modePickAndDrop(bool reset) {
 
     if (reset) {
         state = FOLLOW; lastI2C = 0; hasObject = false; actionTime = 0;
-        lastVal = 4; detectCount = 0; drop_target_yaw = 0.0; turnPhase = 0;
+        lastVal = 6; detectCount = 0; drop_target_yaw = 0.0; turnPhase = 0;
         isInit = false;
         return;
     }
@@ -510,12 +497,11 @@ void modePickAndDrop(bool reset) {
     if (currentMillis - lastI2C < 10) return;
     lastI2C = currentMillis;
 
-    uint8_t raw_val = 255;
+    uint8_t raw_val = 0;
     comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-    if (raw_val == 255) return;
 
     long distance = getSonarDistance();
-    uint8_t val = raw_val & 0x1F;
+    uint8_t val = raw_val & 0x0F;
 
     if (state == PICKING_UP) {
         setMotors(0, 0);
@@ -554,7 +540,7 @@ void modePickAndDrop(bool reset) {
         detectCount = 0;
     }
 
-    if (val == 31) {
+    if (val == 15) {
         if (hasObject) {
             drop_target_yaw = normalizeAngle(current_angle - 90.0);
             state = TURN_RIGHT_DROP;
@@ -565,19 +551,14 @@ void modePickAndDrop(bool reset) {
         }
     } else {
 switch (val) {
-                case 4: case 14: case 31: setMotors(80, 80); break;
-                case 12: setMotors(75, 80); break; 
-                case 8:  setMotors(55, 80); break; 
-                case 24: setMotors(30, 105); break; 
-                case 16: setMotors(-40, 115); break;
-                case 28: setMotors(-60, 135); break;
-                case 30: setMotors(-80, 145); break;
-                case 6:  setMotors(85, 70); break; 
-                case 2:  setMotors(85, 50); break; 
-                case 3:  setMotors(110, 25); break; 
-                case 1:  setMotors(120, -45); break; 
-                case 7:  setMotors(140, -65); break; 
-                case 15: setMotors(150, -85); break; 
+                case 6:  setMotors(80, 80); break;
+                case 4:  setMotors(80, 75); break; 
+                case 12: setMotors(80, 55); break; 
+                case 8:  setMotors(115, -40); break; 
+                case 2:  setMotors(75, 80); break; 
+                case 3:  setMotors(55, 80); break; 
+                case 1:  setMotors(-40, 115); break; 
+                case 15: setMotors(80, 80); break; 
                 default: setMotors(80, 80); break;
             }
     }
@@ -706,15 +687,13 @@ void modeCrossroad(bool reset) {
             
             if (currentMillis - lastI2C >= 10) {
                 lastI2C = currentMillis;
-                uint8_t raw_val = 255;
+                uint8_t raw_val = 0;
                 comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
                 
-                if (raw_val != 255) {
-                    uint8_t val = raw_val & 0x1F;  
-                    if (val != 0) { 
-                        state = RUNNING; 
-                        lastVal = val;
-                    }
+                uint8_t val = raw_val & 0x0F;  
+                if (val != 15) { 
+                    state = RUNNING; 
+                    lastVal = val;
                 }
             }
             return;
@@ -723,46 +702,75 @@ case RUNNING:
             if (currentMillis - lastI2C < 10) return;
             lastI2C = currentMillis;
 
-            uint8_t raw_val = 255; 
+            uint8_t raw_val = 0; 
             comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-            if (raw_val == 255) return;
-            uint8_t val = raw_val & 0x1F;  
+            uint8_t val = raw_val & 0x0F;  
 
-            bool isMidLine = ((val & 0x0E) != 0) && ((val & 0x11) == 0);
+            // Kiểm tra 1 hoặc 2 mắt giữa đang có vạch (giá trị 2, 4, 6)
+            bool isMidLine = ((val & 0x06) != 0) && ((val & 0x09) == 0);
             
-            if (isMidLine) {
-                if (!readyToStart && phase == 0) {
+            if (phase == 0) { // ĐỢI VẠCH XUẤT PHÁT
+                if (isMidLine) {
                     readyToStart = true;
                 }
-            }
-
-            if (phase == 1 && val != 0) {
-                if (val == 31) { 
-                    dirMode = 2;
-                    phase = 2;
-                    stripeCount = 0; 
-                } else if (isMidLine) { 
-                    dirMode = 1;
-                    phase = 2; 
-                    stripeCount = 0; 
+                // Nếu đã bắt được vạch giữa trước đó, và giờ đạp lên full line (15)
+                if (readyToStart && val == 15 && lastVal != 15) {
+                    phase = 1; // Bắt đầu vào vạch xuất phát, nhưng KHÔNG tăng stripeCount
                 }
             }
-
-            if (phase == 4 && val != 0) {
-                if (isMidLine || val == 31) { 
-                    dirMode = 2;
-                    phase = 2;
-                    stripeCount = 0; 
-                } else if (isMidLine) { 
-                    dirMode = 1;
-                    phase = 2; 
-                    stripeCount = 0; 
+            else if (phase == 1) { // RỜI VẠCH XUẤT PHÁT ĐỂ XÁC ĐỊNH CHIỀU
+                if (val != 15) { // Xe vừa trượt khỏi vạch full line đầu tiên
+                    if (val == 0) { 
+                        dirMode = 1; // Chiều 1: Mid -> Full -> Trắng (Màu cam xuất phát)
+                        phase = 2;
+                        stripeCount = 0; 
+                    } else if (isMidLine) { 
+                        dirMode = 2; // Chiều 2: Mid -> Full -> Mid (Màu đỏ xuất phát)
+                        phase = 2; 
+                        stripeCount = 0; 
+                    }
                 }
             }
-
-            if (phase == 4 && val != 31) {
-                if (isMidLine || val == 0) {
-                    setMotors(0, 0);
+            else if (phase == 2) { // ĐẾM 7 VẠCH
+                if (val == 15 && lastVal != 15) { 
+                    setMotors(0, 0); 
+                    stripeCount++;
+                    
+                    uint32_t color = 0;
+                    if (dirMode == 2) { // Chiều cầu vồng
+                        switch (stripeCount) {
+                            case 1: color = pixels.Color(255, 0, 0); break;
+                            case 2: color = pixels.Color(0, 255, 0); break;
+                            case 3: color = pixels.Color(255, 255, 0); break;
+                            case 4: color = pixels.Color(0, 0, 255); break;
+                            case 5: color = pixels.Color(255, 0, 255); break;
+                            case 6: color = pixels.Color(0, 255, 255); break;
+                            case 7: color = pixels.Color(255, 255, 255); break;
+                        }
+                    } else { // Chiều màu Cam
+                        switch (stripeCount) {
+                            case 1: color = pixels.Color(255, 80, 0); break;
+                            case 2: color = pixels.Color(0, 255, 128); break;
+                            case 3: color = pixels.Color(0, 255, 0); break;
+                            case 4: color = pixels.Color(255, 165, 0); break;
+                            case 5: color = pixels.Color(255, 105, 180); break;
+                            case 6: color = pixels.Color(0, 128, 255); break;
+                            case 7: color = pixels.Color(128, 128, 128); break;
+                        }
+                    }
+                    pixels.setPixelColor(stripeCount - 1, color);
+                    pixels.show();
+                    state = PAUSING_STRIPE;
+                    prevMillis = currentMillis;
+                    
+                    if (stripeCount == 7) {
+                        phase = 3; // Chuyển sang chờ vạch đích
+                    }
+                }
+            }
+            else if (phase == 3) { // CHỜ VẠCH ĐÍCH (VẠCH THỨ 8)
+                if (val == 15 && lastVal != 15) { 
+                    setMotors(0, 0); // Phanh khẩn cấp đúng trên vạch đích
                     state = BLINKING_END;
                     indState = IND_BLINKING_END;
                     blinkCount = 0;
@@ -770,61 +778,12 @@ case RUNNING:
                     indPrevMillis = currentMillis;
                     for(int i = 0; i < CROSS_NUMPIXELS; i++) pixels.setPixelColor(i, pixels.Color(255, 255, 255));
                     pixels.show();
-                    phase = 5; 
+                    phase = 4; // Khóa chết bộ đếm
                 }
             }
 
-            if (val == 31 && lastVal != 31) { 
-                if (phase == 0) {
-                    if (readyToStart) {
-                        phase = 1;
-                        readyToStart = false; 
-                    }
-                }
-                else if (phase == 2) {
-                    if (stripeCount < 7) {
-                        setMotors(0, 0); 
-                        stripeCount++;
-                        
-                        uint32_t color = 0;
-                        if (dirMode == 1) {
-                            switch (stripeCount) {
-                                case 1: color = pixels.Color(255, 0, 0); break;
-                                case 2: color = pixels.Color(0, 255, 0); break;
-                                case 3: color = pixels.Color(255, 255, 0); break;
-                                case 4: color = pixels.Color(0, 0, 255); break;
-                                case 5: color = pixels.Color(255, 0, 255); break;
-                                case 6: color = pixels.Color(0, 255, 255); break;
-                                case 7: color = pixels.Color(255, 255, 255); break;
-                            }
-                        } else {
-                            switch (stripeCount) {
-                                case 1: color = pixels.Color(255, 80, 0); break;
-                                case 2: color = pixels.Color(0, 255, 128); break;
-                                case 3: color = pixels.Color(0, 255, 0); break;
-                                case 4: color = pixels.Color(255, 165, 0); break;
-                                case 5: color = pixels.Color(255, 105, 180); break;
-                                case 6: color = pixels.Color(0, 128, 255); break;
-                                case 7: color = pixels.Color(128, 128, 128); break;
-                            }
-                        }
-                        pixels.setPixelColor(stripeCount - 1, color);
-                        pixels.show();
-                        state = PAUSING_STRIPE;
-                        prevMillis = currentMillis;
-                        
-                        if (stripeCount == 7) {
-                            phase = 3; 
-                        }
-                    }
-                }
-                else if (phase == 3) {
-                    phase = 4;
-                }
-            } 
-
             if (state == RUNNING) {
-                driveWithHeading(80, cross_target_yaw, current_angle, pidStraight);
+                driveWithHeading(100, cross_target_yaw, current_angle, pidStraight);
             }
             lastVal = val;
             break;
@@ -832,10 +791,10 @@ case RUNNING:
 }
 void modeBrokenLine(bool reset) {
     static unsigned long lastI2C = 0; 
-    static uint8_t lastVal = 4;
+    static uint8_t lastVal = 6;
 
     if (reset) {
-        lastI2C = 0; lastVal = 4;
+        lastI2C = 0; lastVal = 6;
         return;
     }
 
@@ -843,28 +802,21 @@ void modeBrokenLine(bool reset) {
     if (currentMillis - lastI2C < 10) return;
     lastI2C = currentMillis;
 
-    uint8_t raw_val = 255; 
+    uint8_t raw_val = 0; 
     comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-    if (raw_val == 255) return;
-    uint8_t val = raw_val & 0x1F;  
+    uint8_t val = raw_val & 0x0F;  
     if (val == 0) val = lastVal;
     else lastVal = val;
 
-        switch (val) {
-            case 4: case 14: setMotors(90, 90); break; 
-            case 12: setMotors(86, 90); break; 
-            case 8:  setMotors(78, 90); break; 
-            case 24: setMotors(55, 95); break; 
-            case 16: setMotors(0, 125); break; 
-            case 28: setMotors(0, 110); break;
-            case 30: setMotors(0, 120); break; 
-            case 6:  setMotors(90, 86); break; 
-            case 2:  setMotors(90, 78); break; 
-            case 3:  setMotors(95, 55); break; 
-            case 1:  setMotors(125, 0); break; 
-            case 7:  setMotors(110, 0); break; 
-            case 15: setMotors(120, 0); break; 
-            case 31: setMotors(80, 80); break; 
-            default: setMotors(90, 90); break; 
-        }
+    switch (val) {
+        case 6:  setMotors(90, 90); break; 
+        case 4:  setMotors(90, 86); break; 
+        case 12: setMotors(95, 55); break; 
+        case 8:  setMotors(110, 0); break; 
+        case 2:  setMotors(86, 90); break; 
+        case 3:  setMotors(55, 95); break; 
+        case 1:  setMotors(0, 110); break; 
+        case 15: setMotors(80, 80); break; 
+        default: setMotors(90, 90); break; 
+    }
 }

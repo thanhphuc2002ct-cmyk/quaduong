@@ -3,8 +3,8 @@
 
 // --- Cấu hình I2C ---
 #define I2C_ADDR 0x30 
-#define SDA_PIN 39
-#define SCL_PIN 40
+#define SDA_PIN 40
+#define SCL_PIN 39
 
 #define MPU_SDA_PIN 1
 #define MPU_SCL_PIN 2

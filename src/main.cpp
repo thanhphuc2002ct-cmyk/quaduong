@@ -44,7 +44,8 @@ void setup() {
 }
 
 void loop() {
-
+    extern void updateAngle();
+    updateAngle();
     static unsigned long last_debug_time = 0;
     if (millis() - last_debug_time >= 60) { // Chuẩn 60ms cho siêu âm
         last_debug_time = millis();
@@ -52,18 +53,21 @@ void loop() {
         
         current_distance = getSonarDistance(); // Cập nhật thẳng vào biến toàn cục
         
-        uint8_t raw_val = 255;
+        uint8_t raw_val = 0;
         comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-        uint8_t current_line = (raw_val == 255) ? 255 : (raw_val & 0x1F);
+        uint8_t current_line = raw_val & 0x0F;
+        
         static long last_distance = -1;
         static uint8_t last_line = 255;
-    
-        if (current_distance != last_distance || current_line != last_line) {
-            Serial.printf("[DEBUG LOOP] Sonar: %ld cm  |  Line Sensor: %d\n", current_distance, current_line);
+        static float last_angle = -999.0;
+        
+        if (current_distance != last_distance || current_line != last_line || abs(current_angle - last_angle) > 0.5) {
+            Serial.printf("[DEBUG LOOP]   Line Sensor: %d  |  Goc IMU: %.2f deg\n", /*current_distance,*/ current_line, current_angle);
             last_distance = current_distance;
             last_line = current_line;
+            last_angle = current_angle;
         }
-}
+    }
 if (btnPressed) {
         btnPressed = false;
         delay(15); 
@@ -82,6 +86,14 @@ if (btnPressed) {
                 Serial.println("[BUTTON] DA DE 2S -> BAT DAU CHAY MODE HIEN TAI!");
                 extern void triggerStartSequence();
                 triggerStartSequence(); 
+                
+                if (currentMode == MODE_MAZE) modeMazeSolver(true);
+                else if (currentMode == MODE_OBSTACLE) modeObstacleAvoidance(true);
+                else if (currentMode == MODE_PICK) modePickAndDrop(true);
+                else if (currentMode == MODE_CROSSROAD) modeCrossroad(true);
+                else if (currentMode == MODE_BROKEN_LINE) modeBrokenLine(true);
+                else if (currentMode == MODE_REMOTE) modeRemoteControl(true);
+
                 isRunning = true; 
                 while(digitalRead(BUTTON_PIN) == LOW) { delay(10); } 
             } 
