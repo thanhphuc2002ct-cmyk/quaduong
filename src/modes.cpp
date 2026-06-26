@@ -12,103 +12,135 @@ extern Master comm;
 char remoteCmd = 0;
 
 // Đọc khoảng cách từ cảm biến siêu âm HC-SR04 với timeout chống treo
-long getSonarDistance() {
+long getSonarDistance()
+{
     digitalWrite(TRIG_PIN, LOW);
     delayMicroseconds(2);
     digitalWrite(TRIG_PIN, HIGH);
     delayMicroseconds(10);
     digitalWrite(TRIG_PIN, LOW);
-    
-    long duration = pulseIn(ECHO_PIN, HIGH, 30000); 
-    
+
+    long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+
     static long lastValidDist = 999;
     static int errorCount = 0;
 
-    if (duration == 0) {
+    if (duration == 0)
+    {
         errorCount++;
-        if (errorCount >= 2) {
+        if (errorCount >= 2)
+        {
             lastValidDist = 999;
         }
-        return lastValidDist; 
+        return lastValidDist;
     }
 
-    errorCount = 0; 
+    errorCount = 0;
     long dist = duration * 0.034 / 2;
     lastValidDist = dist;
     return dist;
 }
 
 // Giải mê cung bằng thuật toán ma trận kết hợp PID góc và PWM thuần túy
-void modeMazeSolver(bool reset) {
-    const int MAX_X = 5; 
+void modeMazeSolver(bool reset)
+{
+    const int MAX_X = 5;
     const int MAX_Y = 2;
-    static int grid[6][3] = {0}; 
-    static int currentX = 0; 
-    static int currentY = 0; 
-    static int currentDir = 0; 
+    static int grid[6][3] = {0};
+    static int currentX = 0;
+    static int currentY = 0;
+    static int currentDir = 0;
 
-    enum State { FOLLOW_LINE, NODE_ARRIVED, TURN_RIGHT, TURN_LEFT, TURN_AROUND, PUSH_THROUGH, REVERSE_TO_NODE, FINISHED };
-    static State currentState = FOLLOW_LINE; 
-    static State pendingTurn = TURN_RIGHT; 
+    enum State
+    {
+        FOLLOW_LINE,
+        NODE_ARRIVED,
+        TURN_RIGHT,
+        TURN_LEFT,
+        TURN_AROUND,
+        PUSH_THROUGH,
+        REVERSE_TO_NODE,
+        FINISHED
+    };
+    static State currentState = FOLLOW_LINE;
+    static State pendingTurn = TURN_RIGHT;
     static unsigned long actionStartTime = 0;
     static int turnPhase = 0;
-    static int obstacleCount = 0; 
+    static int obstacleCount = 0;
     static float current_target_yaw = 0.0;
     static bool isInit = false;
 
-    if (reset) {
+    if (reset)
+    {
         memset(grid, 0, sizeof(grid));
-        currentX = 0; currentY = 0; currentDir = 0;
-        currentState = FOLLOW_LINE; pendingTurn = TURN_RIGHT;
-        actionStartTime = 0; turnPhase = 0; obstacleCount = 0;
-        current_target_yaw = 0.0; current_angle = 0.0; isInit = false;
+        currentX = 0;
+        currentY = 0;
+        currentDir = 0;
+        currentState = FOLLOW_LINE;
+        pendingTurn = TURN_RIGHT;
+        actionStartTime = 0;
+        turnPhase = 0;
+        obstacleCount = 0;
+        current_target_yaw = 0.0;
+        current_angle = 0.0;
+        isInit = false;
         return;
     }
 
-    if (!isInit) {
+    if (!isInit)
+    {
         grid[0][0] = 1;
         isInit = true;
     }
 
-    updateAngle(); 
+    updateAngle();
     unsigned long currentMillis = millis();
 
-    if (currentState == FINISHED) {
-        setMotors(0, 0); 
+    if (currentState == FINISHED)
+    {
+        setMotors(0, 0);
         return;
     }
-    
-    if (currentMillis - actionStartTime < 10 && currentState != NODE_ARRIVED && currentState != TURN_RIGHT && currentState != TURN_LEFT && currentState != TURN_AROUND && currentState != PUSH_THROUGH && currentState != REVERSE_TO_NODE) {
+
+    if (currentMillis - actionStartTime < 10 && currentState != NODE_ARRIVED && currentState != TURN_RIGHT && currentState != TURN_LEFT && currentState != TURN_AROUND && currentState != PUSH_THROUGH && currentState != REVERSE_TO_NODE)
+    {
         static unsigned long lastI2CPoll = 0;
-        if (currentMillis - lastI2CPoll < 10) return;
+        if (currentMillis - lastI2CPoll < 10)
+            return;
         lastI2CPoll = currentMillis;
     }
 
-    uint8_t raw_val = 0; 
-    comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val); 
+    uint8_t raw_val = 0;
+    comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
 
-    long currentDistance = getSonarDistance();     
-    uint8_t val = raw_val & 0x0F;        
-    
-    if (currentState == FOLLOW_LINE && val == 15) {
+    long currentDistance = getSonarDistance();
+    uint8_t val = raw_val & 0x0F;
+
+    if (currentState == FOLLOW_LINE && val == 15)
+    {
         setMotors(0, 0);
         delay(500);
-        updateAngle(); 
+        updateAngle();
         currentMillis = millis();
 
-        if (currentDir == 0) currentY++;
-        else if (currentDir == 1) currentX++;
-        else if (currentDir == 2) currentY--;
-        else if (currentDir == 3) currentX--;
+        if (currentDir == 0)
+            currentY++;
+        else if (currentDir == 1)
+            currentX++;
+        else if (currentDir == 2)
+            currentY--;
+        else if (currentDir == 3)
+            currentX--;
 
         currentX = constrain(currentX, 0, MAX_X);
         currentY = constrain(currentY, 0, MAX_Y);
 
-        grid[currentX][currentY] = 1; 
+        grid[currentX][currentY] = 1;
 
         Serial.printf("\n--- DEN NGA TU: X=%d, Y=%d (Huong xe hien tai: %d) ---\n", currentX, currentY, currentDir);
 
-        if (currentX == MAX_X && currentY == MAX_Y) {
+        if (currentX == MAX_X && currentY == MAX_Y)
+        {
             currentState = FINISHED;
             Serial.printf(">> HOAN THANH! Da toi dich (%d,%d)\n", MAX_X, MAX_Y);
             return;
@@ -118,163 +150,228 @@ void modeMazeSolver(bool reset) {
         int bestScore = 9999;
         bool hasUnvisited = false;
 
-        auto evaluateDirection = [&](int dir, int nx, int ny) {
-            if (nx < 0 || nx > MAX_X || ny < 0 || ny > MAX_Y) return; 
-            if (grid[nx][ny] == 2) return; 
-            if (grid[nx][ny] == 0) hasUnvisited = true;
-            
-            int freeWays = 0;
-            if (ny + 1 <= MAX_Y && grid[nx][ny + 1] != 2) freeWays++; 
-            if (nx + 1 <= MAX_X && grid[nx + 1][ny] != 2) freeWays++; 
-            if (ny - 1 >= 0 && grid[nx][ny - 1] != 2) freeWays++;     
-            if (nx - 1 >= 0 && grid[nx - 1][ny] != 2) freeWays++;     
-            
-            if (freeWays <= 1 && !(nx == MAX_X && ny == MAX_Y)) {
-                grid[nx][ny] = 2; 
-                return; 
-            }
-            
-            int score = 0;
-            if (grid[nx][ny] == 1) score += 50; 
-            
-            score += (abs(MAX_X - nx) + abs(MAX_Y - ny)) * 10;
-            
-            int relDir = (dir - currentDir + 4) % 4;
-            if (relDir == 0) score += 0;       
-            else if (relDir == 1) score += 20; 
-            else if (relDir == 3) score += 20; 
-            else if (relDir == 2) score += 200; 
+        auto evaluateDirection = [&](int dir, int nx, int ny)
+        {
+            if (nx < 0 || nx > MAX_X || ny < 0 || ny > MAX_Y)
+                return;
+            if (grid[nx][ny] == 2)
+                return;
+            if (grid[nx][ny] == 0)
+                hasUnvisited = true;
 
-            if (score < bestScore) {
+            int freeWays = 0;
+            if (ny + 1 <= MAX_Y && grid[nx][ny + 1] != 2)
+                freeWays++;
+            if (nx + 1 <= MAX_X && grid[nx + 1][ny] != 2)
+                freeWays++;
+            if (ny - 1 >= 0 && grid[nx][ny - 1] != 2)
+                freeWays++;
+            if (nx - 1 >= 0 && grid[nx - 1][ny] != 2)
+                freeWays++;
+
+            if (freeWays <= 1 && !(nx == MAX_X && ny == MAX_Y))
+            {
+                grid[nx][ny] = 2;
+                return;
+            }
+
+            int score = 0;
+            if (grid[nx][ny] == 1)
+                score += 50;
+
+            score += (abs(MAX_X - nx) + abs(MAX_Y - ny)) * 10;
+
+            int relDir = (dir - currentDir + 4) % 4;
+            if (relDir == 0)
+                score += 0;
+            else if (relDir == 1)
+                score += 20;
+            else if (relDir == 3)
+                score += 20;
+            else if (relDir == 2)
+                score += 200;
+
+            if (score < bestScore)
+            {
                 bestScore = score;
                 bestDir = dir;
             }
         };
 
-        evaluateDirection(0, currentX, currentY + 1); 
-        evaluateDirection(1, currentX + 1, currentY); 
-        evaluateDirection(2, currentX, currentY - 1); 
-        evaluateDirection(3, currentX - 1, currentY); 
+        evaluateDirection(0, currentX, currentY + 1);
+        evaluateDirection(1, currentX + 1, currentY);
+        evaluateDirection(2, currentX, currentY - 1);
+        evaluateDirection(3, currentX - 1, currentY);
 
-        if (bestDir == -1) {
+        if (bestDir == -1)
+        {
             Serial.println("-> MAZE VO NGHIEM! Tat ca cac huong deu bi chan.");
             currentState = FINISHED;
             return;
         }
 
-        if (bestDir == currentDir) {
+        if (bestDir == currentDir)
+        {
             Serial.println("-> Lua chon: DI THANG");
-            current_target_yaw = round(current_angle / 90.0) * 90.0; 
+            current_target_yaw = round(current_angle / 90.0) * 90.0;
             current_angle = current_target_yaw;
             currentState = PUSH_THROUGH;
             actionStartTime = currentMillis;
-        } else {
-            currentState = NODE_ARRIVED; 
+        }
+        else
+        {
+            currentState = NODE_ARRIVED;
             actionStartTime = currentMillis;
-            current_target_yaw = round(current_angle / 90.0) * 90.0; 
+            current_target_yaw = round(current_angle / 90.0) * 90.0;
             current_angle = current_target_yaw;
-            if (bestDir == (currentDir + 1) % 4) { pendingTurn = TURN_RIGHT; Serial.println("-> Lua chon: RE PHAI"); }
-            else if (bestDir == (currentDir + 3) % 4) { pendingTurn = TURN_LEFT; Serial.println("-> Lua chon: RE TRAI"); }
-            else { pendingTurn = TURN_AROUND; Serial.println("-> Lua chon: QUAY DAU (Ngo cut)"); }
+            if (bestDir == (currentDir + 1) % 4)
+            {
+                pendingTurn = TURN_RIGHT;
+                Serial.println("-> Lua chon: RE PHAI");
+            }
+            else if (bestDir == (currentDir + 3) % 4)
+            {
+                pendingTurn = TURN_LEFT;
+                Serial.println("-> Lua chon: RE TRAI");
+            }
+            else
+            {
+                pendingTurn = TURN_AROUND;
+                Serial.println("-> Lua chon: QUAY DAU (Ngo cut)");
+            }
         }
         return;
     }
 
-if (currentState == NODE_ARRIVED) {
+    if (currentState == NODE_ARRIVED)
+    {
         int pushSpeed = 60 + (currentMillis - actionStartTime) / 4;
-        if (pushSpeed > 75) pushSpeed = 75; 
+        if (pushSpeed > 75)
+            pushSpeed = 75;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
-        
-        if (currentMillis - actionStartTime >= 250) {
-            setMotors(0, 0); 
+
+        if (currentMillis - actionStartTime >= 250)
+        {
+            setMotors(0, 0);
             delay(50);
-            
+
             currentState = pendingTurn;
 
             turnPhase = 0;
             actionStartTime = millis(); // Cập nhật lại mốc thời gian sau delay
-            
-            if (pendingTurn == TURN_RIGHT) current_target_yaw = normalizeAngle(current_target_yaw - 50.0);
-            else if (pendingTurn == TURN_LEFT) current_target_yaw = normalizeAngle(current_target_yaw + 50.0);
-            else if (pendingTurn == TURN_AROUND) current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
+
+            if (pendingTurn == TURN_RIGHT)
+                current_target_yaw = normalizeAngle(current_target_yaw - 50.0);
+            else if (pendingTurn == TURN_LEFT)
+                current_target_yaw = normalizeAngle(current_target_yaw + 50.0);
+            else if (pendingTurn == TURN_AROUND)
+                current_target_yaw = normalizeAngle(current_target_yaw + 180.0);
         }
         return;
     }
 
-if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND) {
+    if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == TURN_AROUND)
+    {
         float error_val = calculateAngleError(current_target_yaw, current_angle);
         float error_abs = abs(error_val);
-        
+
         bool caughtLine = (error_abs < 40.0) && (val == 6 || val == 4 || val == 2 || val == 12 || val == 3);
-        
-        if (error_abs < 3.0 || caughtLine || turnPhase == 1) {
-            setMotors(0, 0); 
-            if (turnPhase == 0) {
+
+        if (error_abs < 3.0 || caughtLine || turnPhase == 1)
+        {
+            setMotors(0, 0);
+            if (turnPhase == 0)
+            {
                 turnPhase = 1; // Khóa trạng thái phanh
-                actionStartTime = currentMillis; 
-            } else if (currentMillis - actionStartTime >= 100) { 
-                if (currentState == TURN_RIGHT) currentDir = (currentDir + 1) % 4;
-                else if (currentState == TURN_LEFT) currentDir = (currentDir + 3) % 4;
-                else currentDir = (currentDir + 2) % 4;
-                
-                currentState = FOLLOW_LINE; 
                 actionStartTime = currentMillis;
             }
-        } else {
-            turnPhase = 0; 
+            else if (currentMillis - actionStartTime >= 100)
+            {
+                if (currentState == TURN_RIGHT)
+                    currentDir = (currentDir + 1) % 4;
+                else if (currentState == TURN_LEFT)
+                    currentDir = (currentDir + 3) % 4;
+                else
+                    currentDir = (currentDir + 2) % 4;
+
+                currentState = FOLLOW_LINE;
+                actionStartTime = currentMillis;
+            }
+        }
+        else
+        {
+            turnPhase = 0;
             driveWithHeading(0, current_target_yaw, current_angle, pidTurn);
         }
         return;
     }
 
-
-    if (currentState == PUSH_THROUGH) {
+    if (currentState == PUSH_THROUGH)
+    {
         int pushSpeed = 65 + (currentMillis - actionStartTime) / 3;
-        if (pushSpeed > 85) pushSpeed = 85;
+        if (pushSpeed > 85)
+            pushSpeed = 85;
         driveWithHeading(pushSpeed, current_target_yaw, current_angle, pidStraight);
-        if (currentMillis - actionStartTime > 250 && val != 15) {
+        if (currentMillis - actionStartTime > 250 && val != 15)
+        {
             currentState = FOLLOW_LINE;
-        } else if (currentMillis - actionStartTime > 800) { // Timeout an toàn 800ms
+        }
+        else if (currentMillis - actionStartTime > 800)
+        { // Timeout an toàn 800ms
             currentState = FOLLOW_LINE;
         }
         return;
     }
-    if (currentState == REVERSE_TO_NODE) {
-        driveWithHeading(-80, current_target_yaw, current_angle, pidStraight); 
-        if (currentMillis - actionStartTime > 300 && val == 15) {
+    if (currentState == REVERSE_TO_NODE)
+    {
+        driveWithHeading(-80, current_target_yaw, current_angle, pidStraight);
+        if (currentMillis - actionStartTime > 300 && val == 15)
+        {
             setMotors(0, 0);
             current_angle = current_target_yaw;
-            delay(50); 
-            currentState = FOLLOW_LINE; 
+            delay(50);
+            currentState = FOLLOW_LINE;
         }
         return;
     }
 
-    if (currentState == FOLLOW_LINE) {
-        if (currentDistance > 0 && currentDistance <= 5) { 
+    if (currentState == FOLLOW_LINE)
+    {
+        if (currentDistance > 0 && currentDistance <= 5)
+        {
             obstacleCount++;
-            if (obstacleCount >= 3) { 
+            if (obstacleCount >= 3)
+            {
                 setMotors(0, 0);
-                delay(1000); 
-                updateAngle(); 
+                delay(1000);
+                updateAngle();
                 int nx = currentX, ny = currentY;
-                if (currentDir == 0) ny++;
-                else if (currentDir == 1) nx++;
-                else if (currentDir == 2) ny--;
-                else if (currentDir == 3) nx--;
-                
-                if (nx >= 0 && nx <= MAX_X && ny >= 0 && ny <= MAX_Y) {
-                    grid[nx][ny] = 2; 
+                if (currentDir == 0)
+                    ny++;
+                else if (currentDir == 1)
+                    nx++;
+                else if (currentDir == 2)
+                    ny--;
+                else if (currentDir == 3)
+                    nx--;
+
+                if (nx >= 0 && nx <= MAX_X && ny >= 0 && ny <= MAX_Y)
+                {
+                    grid[nx][ny] = 2;
                     Serial.printf("!!! PHAT HIEN VAT CAN TAI: X=%d, Y=%d !!! Da cap nhat ban do.\n", nx, ny);
                 }
 
-                if (currentDir == 0) currentY--;
-                else if (currentDir == 1) currentX--;
-                else if (currentDir == 2) currentY++;
-                else if (currentDir == 3) currentX++;
+                if (currentDir == 0)
+                    currentY--;
+                else if (currentDir == 1)
+                    currentX--;
+                else if (currentDir == 2)
+                    currentY++;
+                else if (currentDir == 3)
+                    currentX++;
                 Serial.println("-> Lui ve nga tu truoc do de tim duong khac...");
                 current_target_yaw = round(current_angle / 90.0) * 90.0;
-                currentState = REVERSE_TO_NODE; 
+                currentState = REVERSE_TO_NODE;
 
                 // currentX = nx;
                 // currentY = ny;
@@ -282,40 +379,70 @@ if (currentState == TURN_RIGHT || currentState == TURN_LEFT || currentState == T
                 // currentState = TURN_AROUND;
                 // turnPhase = 0;
                 // current_target_yaw = normalizeAngle(round(current_angle / 90.0) * 90.0 + 180.0);
-                
-                // actionStartTime = millis(); 
-                // obstacleCount = 0; 
+
+                // actionStartTime = millis();
+                // obstacleCount = 0;
                 // return;
             }
-        } else {
+        }
+        else
+        {
             obstacleCount = 0;
         }
 
-switch (val) {
-            case 6:  setMotors(90, 90); break; 
-            case 4:  setMotors(90, 86); break; 
-            case 12: setMotors(95, 55); break; 
-            case 8:  setMotors(110, 0); break; 
-            case 2:  setMotors(86, 90); break; 
-            case 3:  setMotors(55, 95); break; 
-            case 1:  setMotors(0, 110); break; 
-            case 15: driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
-            case 0:  driveWithHeading(80, current_target_yaw, current_angle, pidStraight); break; 
-            default: driveWithHeading(90, current_target_yaw, current_angle, pidStraight); break; 
+        switch (val)
+        {
+        case 6:
+            setMotors(130, 130);
+            break;
+        case 4:
+            setMotors(130, 126);
+            break;
+        case 12:
+            setMotors(135, 95);
+            break;
+        case 8:
+            setMotors(150, 40);
+            break;
+        case 2:
+            setMotors(126, 130);
+            break;
+        case 3:
+            setMotors(95, 135);
+            break;
+        case 1:
+            setMotors(40, 150);
+            break;
+        case 15:
+            driveWithHeading(120, current_target_yaw, current_angle, pidStraight);
+            break;
+        case 0:
+            driveWithHeading(120, current_target_yaw, current_angle, pidStraight);
+            break;
+        default:
+            driveWithHeading(130, current_target_yaw, current_angle, pidStraight);
+            break;
         }
     }
 }
 
-
 // Điều khiển xe bằng Remote thông qua MPU6050
-void modeRemoteControl(bool reset) {
-    enum RemoteState { IDLE, MOVING_FORWARD, MOVING_BACKWARD, TURNING };
+void modeRemoteControl(bool reset)
+{
+    enum RemoteState
+    {
+        IDLE,
+        MOVING_FORWARD,
+        MOVING_BACKWARD,
+        TURNING
+    };
     static RemoteState state = IDLE;
     static unsigned long actionStartTime = 0;
     static float target_yaw = 0.0;
     static bool isInit = false;
 
-    if (reset) {
+    if (reset)
+    {
         state = IDLE;
         actionStartTime = 0;
         target_yaw = 0.0;
@@ -324,7 +451,8 @@ void modeRemoteControl(bool reset) {
         return;
     }
 
-    if (!isInit) {
+    if (!isInit)
+    {
         updateAngle();
         target_yaw = current_angle;
         isInit = true;
@@ -333,168 +461,255 @@ void modeRemoteControl(bool reset) {
     updateAngle();
     unsigned long currentMillis = millis();
 
-    switch (state) {
-        case IDLE:
-            setMotors(0, 0);
-            if (remoteCmd == 'U') {
-                state = MOVING_FORWARD;
-                target_yaw = current_angle; 
-                actionStartTime = currentMillis;
-                remoteCmd = 0; 
-            } else if (remoteCmd == 'D') {
-                state = MOVING_BACKWARD;
-                target_yaw = current_angle;
-                actionStartTime = currentMillis;
-                remoteCmd = 0;
-            } else if (remoteCmd == 'L') {
-                state = TURNING;
-                target_yaw = normalizeAngle(current_angle + 90.0);
-                remoteCmd = 0;
-            } else if (remoteCmd == 'R') {
-                state = TURNING;
-                target_yaw = normalizeAngle(current_angle - 90.0);
-                remoteCmd = 0;
-            } else {
-                remoteCmd = 0; 
-            }
-            break;
-
-        case MOVING_FORWARD:
-            driveWithHeading(120, target_yaw, current_angle, pidStraight);
-            if (currentMillis - actionStartTime >= 2000) {
-                state = IDLE;
-            }
-            break;
-
-        case MOVING_BACKWARD:
-            driveWithHeading(-120, target_yaw, current_angle, pidStraight);
-            if (currentMillis - actionStartTime >= 2000) {
-                state = IDLE;
-            }
-            break;
-
-        case TURNING: {
-            float error_val = calculateAngleError(target_yaw, current_angle);
-            if (abs(error_val) < 3.0) {
-                setMotors(0, 0);
-                state = IDLE;
-            } else {
-                driveWithHeading(0, target_yaw, current_angle, pidTurn);
-            }
-            break;
+    switch (state)
+    {
+    case IDLE:
+        setMotors(0, 0);
+        if (remoteCmd == 'U')
+        {
+            state = MOVING_FORWARD;
+            target_yaw = current_angle;
+            actionStartTime = currentMillis;
+            remoteCmd = 0;
         }
+        else if (remoteCmd == 'D')
+        {
+            state = MOVING_BACKWARD;
+            target_yaw = current_angle;
+            actionStartTime = currentMillis;
+            remoteCmd = 0;
+        }
+        else if (remoteCmd == 'L')
+        {
+            state = TURNING;
+            target_yaw = normalizeAngle(current_angle + 90.0);
+            remoteCmd = 0;
+        }
+        else if (remoteCmd == 'R')
+        {
+            state = TURNING;
+            target_yaw = normalizeAngle(current_angle - 90.0);
+            remoteCmd = 0;
+        }
+        else
+        {
+            remoteCmd = 0;
+        }
+        break;
+
+    case MOVING_FORWARD:
+        driveWithHeading(120, target_yaw, current_angle, pidStraight);
+        if (currentMillis - actionStartTime >= 2000)
+        {
+            state = IDLE;
+        }
+        break;
+
+    case MOVING_BACKWARD:
+        driveWithHeading(-120, target_yaw, current_angle, pidStraight);
+        if (currentMillis - actionStartTime >= 2000)
+        {
+            state = IDLE;
+        }
+        break;
+
+    case TURNING:
+    {
+        float error_val = calculateAngleError(target_yaw, current_angle);
+        if (abs(error_val) < 3.0)
+        {
+            setMotors(0, 0);
+            state = IDLE;
+        }
+        else
+        {
+            driveWithHeading(0, target_yaw, current_angle, pidTurn);
+        }
+        break;
+    }
     }
 }
 
-void modeObstacleAvoidance(bool reset) {
-    enum ObstacleState { FOLLOW, OBSTACLE };
+void modeObstacleAvoidance(bool reset)
+{
+    enum ObstacleState
+    {
+        FOLLOW,
+        OBSTACLE
+    };
     static ObstacleState state = FOLLOW;
     static unsigned long lastI2C = 0;
-    static uint8_t lastVal = 6; 
+    static uint8_t lastVal = 6;
 
     // Lấy biến siêu âm đã được quét sẵn từ main.cpp sang dùng
-    extern long current_distance; 
+    extern long current_distance;
 
-    if (reset) {
-        state = FOLLOW; lastI2C = 0; lastVal = 6;
+    if (reset)
+    {
+        state = FOLLOW;
+        lastI2C = 0;
+        lastVal = 6;
         return;
     }
-    
+
     unsigned long currentMillis = millis();
 
-    if (current_distance > 0 && current_distance <= 18) {
+    if (current_distance > 0 && current_distance <= 18)
+    {
         setMotors(0, 0);
         state = OBSTACLE;
-        return; 
-    } else {
-        if (state == OBSTACLE) state = FOLLOW;
+        return;
+    }
+    else
+    {
+        if (state == OBSTACLE)
+            state = FOLLOW;
     }
 
-    if (currentMillis - lastI2C < 10) return;
+    if (currentMillis - lastI2C < 10)
+        return;
     lastI2C = currentMillis;
 
     uint8_t raw_val = 0;
     comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
 
-    uint8_t val = raw_val & 0x0F; 
+    uint8_t val = raw_val & 0x0F;
 
-    if (val == 0) val = lastVal;
-    else lastVal = val;
+    if (val == 0)
+        val = lastVal;
+    else
+        lastVal = val;
 
-    if (state == FOLLOW) {
-        switch (val) {
-            case 6:  setMotors(90, 90); break; 
-            case 4:  setMotors(90, 86); break; 
-            case 12: setMotors(95, 55); break; 
-            case 8:  setMotors(110, 0); break; 
-            case 2:  setMotors(86, 90); break; 
-            case 3:  setMotors(55, 95); break; 
-            case 1:  setMotors(0, 110); break; 
-            case 15: setMotors(80, 80); break; 
-            default: setMotors(90, 90); break; 
+    if (state == FOLLOW)
+    {
+        switch (val)
+        {
+        case 6:
+            setMotors(130, 130);
+            break;
+        case 4:
+            setMotors(130, 126);
+            break;
+        case 12:
+            setMotors(135, 95);
+            break;
+        case 8:
+            setMotors(150, 40);
+            break;
+        case 2:
+            setMotors(126, 130);
+            break;
+        case 3:
+            setMotors(95, 135);
+            break;
+        case 1:
+            setMotors(40, 150);
+            break;
+        case 15:
+            setMotors(120, 120);
+            break;
+        default:
+            setMotors(130, 130);
+            break;
         }
     }
 }
 
 // Điều khiển cơ cấu servo kẹp nhả vật thể dựa trên tín hiệu siêu âm
-void modePickAndDrop(bool reset) {
-    enum PickState { FOLLOW, PICKING_UP, TURN_RIGHT_DROP, DROPPING_ACTION, TURN_LEFT_BACK };
+void modePickAndDrop(bool reset)
+{
+    enum PickState
+    {
+        FOLLOW,
+        PICKING_UP,
+        TURN_RIGHT_DROP,
+        DROPPING_ACTION,
+        TURN_LEFT_BACK
+    };
     static PickState state = FOLLOW;
-    static unsigned long lastI2C = 0; 
+    static unsigned long lastI2C = 0;
     static bool hasObject = false;
     static unsigned long actionTime = 0;
-    static uint8_t lastVal = 6; 
+    static uint8_t lastVal = 6;
     static int detectCount = 0;
     static float drop_target_yaw = 0.0;
     static int turnPhase = 0;
     static Servo gripper;
     static bool isInit = false;
 
-    if (reset) {
-        state = FOLLOW; lastI2C = 0; hasObject = false; actionTime = 0;
-        lastVal = 6; detectCount = 0; drop_target_yaw = 0.0; turnPhase = 0;
+    if (reset)
+    {
+        state = FOLLOW;
+        lastI2C = 0;
+        hasObject = false;
+        actionTime = 0;
+        lastVal = 6;
+        detectCount = 0;
+        drop_target_yaw = 0.0;
+        turnPhase = 0;
         isInit = false;
         return;
     }
 
-    if (!isInit) {
+    if (!isInit)
+    {
         ESP32PWM::allocateTimer(0);
         gripper.setPeriodHertz(50);
-        gripper.attach(48, 500, 2400); 
-        gripper.write(0); 
+        gripper.attach(48, 500, 2400);
+        gripper.write(0);
         isInit = true;
     }
 
     updateAngle();
     unsigned long currentMillis = millis();
 
-    if (state == TURN_RIGHT_DROP || state == TURN_LEFT_BACK) {
+    if (state == TURN_RIGHT_DROP || state == TURN_LEFT_BACK)
+    {
         float error_val = calculateAngleError(drop_target_yaw, current_angle);
-        if (abs(error_val) < 10.0) {
+        if (abs(error_val) < 10.0)
+        {
             setMotors(0, 0);
-            if (turnPhase == 0) {
+            if (turnPhase == 0)
+            {
                 turnPhase = 1;
                 actionTime = currentMillis;
-            } else if (currentMillis - actionTime >= 100) {
-                if (state == TURN_RIGHT_DROP) {
+            }
+            else if (currentMillis - actionTime >= 100)
+            {
+                if (state == TURN_RIGHT_DROP)
+                {
                     state = DROPPING_ACTION;
                     actionTime = currentMillis;
-                } else {
+                }
+                else
+                {
                     state = FOLLOW;
                 }
             }
-        } else {
+        }
+        else
+        {
             turnPhase = 0;
-            if (state == TURN_RIGHT_DROP) {
-                if (error_val < 0) setMotors(80, 0); else setMotors(-50, 0);
-            } else {
-                if (error_val > 0) setMotors(0, 80); else setMotors(0, -50);
+            if (state == TURN_RIGHT_DROP)
+            {
+                if (error_val < 0)
+                    setMotors(80, 0);
+                else
+                    setMotors(-50, 0);
+            }
+            else
+            {
+                if (error_val > 0)
+                    setMotors(0, 80);
+                else
+                    setMotors(0, -50);
             }
         }
         return;
     }
 
-    if (currentMillis - lastI2C < 10) return;
+    if (currentMillis - lastI2C < 10)
+        return;
     lastI2C = currentMillis;
 
     uint8_t raw_val = 0;
@@ -503,20 +718,24 @@ void modePickAndDrop(bool reset) {
     long distance = getSonarDistance();
     uint8_t val = raw_val & 0x0F;
 
-    if (state == PICKING_UP) {
+    if (state == PICKING_UP)
+    {
         setMotors(0, 0);
-        gripper.write(90); 
-        if (currentMillis - actionTime >= 3000) { 
+        gripper.write(90);
+        if (currentMillis - actionTime >= 3000)
+        {
             hasObject = true;
             state = FOLLOW;
         }
         return;
     }
 
-    if (state == DROPPING_ACTION) {
-        setMotors(0, 0); 
+    if (state == DROPPING_ACTION)
+    {
+        setMotors(0, 0);
         gripper.write(0);
-        if (currentMillis - actionTime >= 1000) { 
+        if (currentMillis - actionTime >= 1000)
+        {
             hasObject = false;
             drop_target_yaw = normalizeAngle(current_angle + 90.0);
             state = TURN_LEFT_BACK;
@@ -525,42 +744,73 @@ void modePickAndDrop(bool reset) {
         return;
     }
 
-    if (val == 0) val = lastVal;
-    else lastVal = val;
+    if (val == 0)
+        val = lastVal;
+    else
+        lastVal = val;
 
-    if (!hasObject && distance > 0 && distance <= 10) {
+    if (!hasObject && distance > 0 && distance <= 10)
+    {
         detectCount++;
-        if (detectCount >= 3) {
+        if (detectCount >= 3)
+        {
             actionTime = currentMillis;
             state = PICKING_UP;
-            detectCount = 0; 
+            detectCount = 0;
             return;
         }
-    } else {
+    }
+    else
+    {
         detectCount = 0;
     }
 
-    if (val == 15) {
-        if (hasObject) {
+    if (val == 15)
+    {
+        if (hasObject)
+        {
             drop_target_yaw = normalizeAngle(current_angle - 90.0);
             state = TURN_RIGHT_DROP;
             turnPhase = 0;
             return;
-        } else {
+        }
+        else
+        {
             setMotors(70, 65);
         }
-    } else {
-switch (val) {
-                case 6:  setMotors(80, 80); break;
-                case 4:  setMotors(80, 75); break; 
-                case 12: setMotors(80, 55); break; 
-                case 8:  setMotors(115, -40); break; 
-                case 2:  setMotors(75, 80); break; 
-                case 3:  setMotors(55, 80); break; 
-                case 1:  setMotors(-40, 115); break; 
-                case 15: setMotors(80, 80); break; 
-                default: setMotors(80, 80); break;
-            }
+    }
+    else
+    {
+        switch (val)
+        {
+        case 6:
+            setMotors(120, 120);
+            break;
+        case 4:
+            setMotors(120, 115);
+            break;
+        case 12:
+            setMotors(120, 95);
+            break;
+        case 8:
+            setMotors(155, 0);
+            break;
+        case 2:
+            setMotors(115, 120);
+            break;
+        case 3:
+            setMotors(95, 120);
+            break;
+        case 1:
+            setMotors(0, 155);
+            break;
+        case 15:
+            setMotors(120, 120);
+            break;
+        default:
+            setMotors(120, 120);
+            break;
+        }
     }
 }
 // Đếm vạch ngang giao lộ và phản hồi tín hiệu âm thanh kết hợp chớp LED đa sắc
@@ -568,39 +818,69 @@ const int CROSS_LED_PIN = 38;
 const int CROSS_NUMPIXELS = 8;
 Adafruit_NeoPixel pixels(CROSS_NUMPIXELS, CROSS_LED_PIN, NEO_GRB + NEO_KHZ800);
 
-void initCrossroadLED() {
+void initCrossroadLED()
+{
     pixels.begin();
     pixels.setBrightness(50);
     pixels.clear();
     pixels.show();
 }
 
-void triggerModeChangeSequence() {
-    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(255, 0, 0));
-    pixels.show(); delay(150);
-    pixels.clear(); pixels.show();
+void triggerModeChangeSequence()
+{
+    for (int i = 0; i < 8; i++)
+        pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.show();
+    delay(150);
+    pixels.clear();
+    pixels.show();
 }
 
-void triggerStartSequence() {
+void triggerStartSequence()
+{
     setMotors(0, 0);
-    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(255, 0, 0));
-    pixels.show(); delay(150);
-    pixels.clear(); pixels.show(); delay(150);
-    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(255, 0, 0));
-    pixels.show(); delay(150);
-    pixels.clear(); pixels.show(); delay(150);
-    for (int i = 0; i < 8; i++) pixels.setPixelColor(i, pixels.Color(0, 255, 0));
-    pixels.show(); delay(250);
-    pixels.clear(); pixels.show(); delay(150);
-    
+    for (int i = 0; i < 8; i++)
+        pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.show();
+    delay(150);
+    pixels.clear();
+    pixels.show();
+    delay(150);
+    for (int i = 0; i < 8; i++)
+        pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+    pixels.show();
+    delay(150);
+    pixels.clear();
+    pixels.show();
+    delay(150);
+    for (int i = 0; i < 8; i++)
+        pixels.setPixelColor(i, pixels.Color(0, 255, 0));
+    pixels.show();
+    delay(250);
+    pixels.clear();
+    pixels.show();
+    delay(150);
+
     extern unsigned long prev_time;
     prev_time = micros(); // Xóa tích lũy thời gian ảo do delay gây ra
 }
 
-void modeCrossroad(bool reset) {
-    enum IndState { IDLE, IND_BLINKING_END };
-    enum RobotState { RUNNING, PAUSING_STRIPE, PAUSING_END, BLINKING_END, CROSSING_LINE };
-    
+void modeCrossroad(bool reset)
+{
+    enum IndState
+    {
+        IDLE,
+        IND_BLINKING_END
+    };
+    enum RobotState
+    {
+        RUNNING,
+        PAUSING_STRIPE,
+        PAUSING_END,
+        BLINKING_END,
+        CROSSING_LINE
+    };
+
     static IndState indState = IDLE;
     static RobotState state = RUNNING;
     static unsigned long indPrevMillis = 0;
@@ -611,30 +891,40 @@ void modeCrossroad(bool reset) {
     static unsigned long prevMillis = 0;
     static unsigned long lastI2C = 0;
     static float cross_target_yaw = 0.0;
-    static int phase = 0; 
-    static int dirMode = 0; 
-    static bool readyToStart = false; 
-    static bool isInit = false; 
+    static int phase = 0;
+    static int dirMode = 0;
+    static bool readyToStart = false;
+    static bool isInit = false;
     static unsigned long startRunTime = 0; // THÊM BIẾN NÀY
 
-    if (reset) {
-        indState = IDLE; state = RUNNING; indPrevMillis = 0; blinkCount = 0;
-        ledState = false; stripeCount = 0; lastVal = 15;
-        prevMillis = 0; lastI2C = 0; 
-        phase = 0; dirMode = 0; readyToStart = false;
-        isInit = false; 
+    if (reset)
+    {
+        indState = IDLE;
+        state = RUNNING;
+        indPrevMillis = 0;
+        blinkCount = 0;
+        ledState = false;
+        stripeCount = 0;
+        lastVal = 15;
+        prevMillis = 0;
+        lastI2C = 0;
+        phase = 0;
+        dirMode = 0;
+        readyToStart = false;
+        isInit = false;
         startRunTime = millis(); // CHỐT THỜI GIAN BẮT ĐẦU
-        
+
         updateAngle();
-        cross_target_yaw = current_angle; 
-        
+        cross_target_yaw = current_angle;
+
         pixels.clear();
-        pixels.show(); 
+        pixels.show();
         return;
     }
 
     // LẤY GÓC HIỆN TẠI LÀM TIÊU CHUẨN NGAY KHI VÀO MODE
-    if (!isInit) {
+    if (!isInit)
+    {
         updateAngle();
         cross_target_yaw = current_angle;
         isInit = true;
@@ -643,18 +933,25 @@ void modeCrossroad(bool reset) {
     updateAngle();
     unsigned long currentMillis = millis();
 
-    if (indState == IND_BLINKING_END) {
-        if (currentMillis - indPrevMillis >= 500) {
+    if (indState == IND_BLINKING_END)
+    {
+        if (currentMillis - indPrevMillis >= 500)
+        {
             indPrevMillis = currentMillis;
-            ledState = !ledState; 
-            if (ledState) {
-                for(int i = 0; i < CROSS_NUMPIXELS; i++) pixels.setPixelColor(i, pixels.Color(255, 255, 255));
-            } else {
+            ledState = !ledState;
+            if (ledState)
+            {
+                for (int i = 0; i < CROSS_NUMPIXELS; i++)
+                    pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+            }
+            else
+            {
                 pixels.clear();
             }
             pixels.show();
             blinkCount++;
-            if (blinkCount >= 10) { 
+            if (blinkCount >= 10)
+            {
                 pixels.clear();
                 pixels.show();
                 indState = IDLE;
@@ -662,171 +959,252 @@ void modeCrossroad(bool reset) {
         }
     }
 
-    switch (state) {
-        case PAUSING_STRIPE:
-            if (currentMillis - prevMillis >= 2000) {
-                state = CROSSING_LINE;
-            }
-            return;
-            
-        case PAUSING_END:
-            if (currentMillis - prevMillis >= 10000) {
-                state = CROSSING_LINE;
-                prevMillis = currentMillis;
-            }
-            return;
-            
-        case BLINKING_END:
-            setMotors(0, 0);
-            if (indState != IND_BLINKING_END) {
-                state = PAUSING_END;
-                prevMillis = currentMillis + 9999999; 
-            }
-            return;
-            
-        case CROSSING_LINE:
-            driveWithHeading(100, cross_target_yaw, current_angle, pidStraight);
-            
-            if (currentMillis - lastI2C >= 10) {
-                lastI2C = currentMillis;
-                uint8_t raw_val = 0;
-                comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-                
-                uint8_t val = raw_val & 0x0F;  
-                if (val != 15) { 
-                    state = RUNNING; 
-                    lastVal = val;
-                }
-            }
-            return;
-            
-case RUNNING:
-            if (currentMillis - lastI2C < 10) return;
+    switch (state)
+    {
+    case PAUSING_STRIPE:
+        if (currentMillis - prevMillis >= 2000)
+        {
+            state = CROSSING_LINE;
+        }
+        return;
+
+    case PAUSING_END:
+        if (currentMillis - prevMillis >= 10000)
+        {
+            state = CROSSING_LINE;
+            prevMillis = currentMillis;
+        }
+        return;
+
+    case BLINKING_END:
+        setMotors(0, 0);
+        if (indState != IND_BLINKING_END)
+        {
+            state = PAUSING_END;
+            prevMillis = currentMillis + 9999999;
+        }
+        return;
+
+    case CROSSING_LINE:
+        driveWithHeading(100, cross_target_yaw, current_angle, pidStraight);
+
+        if (currentMillis - lastI2C >= 10)
+        {
             lastI2C = currentMillis;
-
-            uint8_t raw_val = 0; 
+            uint8_t raw_val = 0;
             comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-            uint8_t val = raw_val & 0x0F;  
 
-            // Kiểm tra 1 hoặc 2 mắt giữa đang có vạch (giá trị 2, 4, 6)
-            bool isMidLine = ((val & 0x06) != 0) && ((val & 0x09) == 0);
-            
-            if (phase == 0) { // ĐỢI VẠCH XUẤT PHÁT
-                if (isMidLine) {
-                    readyToStart = true;
+            uint8_t val = raw_val & 0x0F;
+            if (val != 15)
+            {
+                state = RUNNING;
+                lastVal = val;
+            }
+        }
+        return;
+
+    case RUNNING:
+        if (currentMillis - lastI2C < 10)
+            return;
+        lastI2C = currentMillis;
+
+        uint8_t raw_val = 0;
+        comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
+        uint8_t val = raw_val & 0x0F;
+
+        // Kiểm tra 1 hoặc 2 mắt giữa đang có vạch (giá trị 2, 4, 6)
+        bool isMidLine = ((val & 0x06) != 0) && ((val & 0x09) == 0);
+
+        if (phase == 0)
+        { // ĐỢI VẠCH XUẤT PHÁT
+            if (isMidLine)
+            {
+                readyToStart = true;
+            }
+            // Nếu đã bắt được vạch giữa trước đó, và giờ đạp lên full line (15)
+            if (readyToStart && val == 15 && lastVal != 15)
+            {
+                phase = 1; // Bắt đầu vào vạch xuất phát, nhưng KHÔNG tăng stripeCount
+            }
+        }
+        else if (phase == 1)
+        { // RỜI VẠCH XUẤT PHÁT ĐỂ XÁC ĐỊNH CHIỀU
+            if (val != 15)
+            { // Xe vừa trượt khỏi vạch full line đầu tiên
+                if (val == 0)
+                {
+                    dirMode = 1; // Chiều 1: Mid -> Full -> Trắng (Màu cam xuất phát)
+                    phase = 2;
+                    stripeCount = 0;
                 }
-                // Nếu đã bắt được vạch giữa trước đó, và giờ đạp lên full line (15)
-                if (readyToStart && val == 15 && lastVal != 15) {
-                    phase = 1; // Bắt đầu vào vạch xuất phát, nhưng KHÔNG tăng stripeCount
+                else if (isMidLine)
+                {
+                    dirMode = 2; // Chiều 2: Mid -> Full -> Mid (Màu đỏ xuất phát)
+                    phase = 2;
+                    stripeCount = 0;
                 }
             }
-            else if (phase == 1) { // RỜI VẠCH XUẤT PHÁT ĐỂ XÁC ĐỊNH CHIỀU
-                if (val != 15) { // Xe vừa trượt khỏi vạch full line đầu tiên
-                    if (val == 0) { 
-                        dirMode = 1; // Chiều 1: Mid -> Full -> Trắng (Màu cam xuất phát)
-                        phase = 2;
-                        stripeCount = 0; 
-                    } else if (isMidLine) { 
-                        dirMode = 2; // Chiều 2: Mid -> Full -> Mid (Màu đỏ xuất phát)
-                        phase = 2; 
-                        stripeCount = 0; 
+        }
+        else if (phase == 2)
+        { // ĐẾM 7 VẠCH
+            if (val == 15 && lastVal != 15)
+            {
+                setMotors(0, 0);
+                stripeCount++;
+
+                uint32_t color = 0;
+                if (dirMode == 2)
+                { // Chiều cầu vồng
+                    switch (stripeCount)
+                    {
+                    case 1:
+                        color = pixels.Color(255, 0, 0);
+                        break;
+                    case 2:
+                        color = pixels.Color(0, 255, 0);
+                        break;
+                    case 3:
+                        color = pixels.Color(255, 255, 0);
+                        break;
+                    case 4:
+                        color = pixels.Color(0, 0, 255);
+                        break;
+                    case 5:
+                        color = pixels.Color(255, 0, 255);
+                        break;
+                    case 6:
+                        color = pixels.Color(0, 255, 255);
+                        break;
+                    case 7:
+                        color = pixels.Color(255, 255, 255);
+                        break;
                     }
                 }
-            }
-            else if (phase == 2) { // ĐẾM 7 VẠCH
-                if (val == 15 && lastVal != 15) { 
-                    setMotors(0, 0); 
-                    stripeCount++;
-                    
-                    uint32_t color = 0;
-                    if (dirMode == 2) { // Chiều cầu vồng
-                        switch (stripeCount) {
-                            case 1: color = pixels.Color(255, 0, 0); break;
-                            case 2: color = pixels.Color(0, 255, 0); break;
-                            case 3: color = pixels.Color(255, 255, 0); break;
-                            case 4: color = pixels.Color(0, 0, 255); break;
-                            case 5: color = pixels.Color(255, 0, 255); break;
-                            case 6: color = pixels.Color(0, 255, 255); break;
-                            case 7: color = pixels.Color(255, 255, 255); break;
-                        }
-                    } else { // Chiều màu Cam
-                        switch (stripeCount) {
-                            case 1: color = pixels.Color(255, 80, 0); break;
-                            case 2: color = pixels.Color(0, 255, 128); break;
-                            case 3: color = pixels.Color(0, 255, 0); break;
-                            case 4: color = pixels.Color(255, 165, 0); break;
-                            case 5: color = pixels.Color(255, 105, 180); break;
-                            case 6: color = pixels.Color(0, 128, 255); break;
-                            case 7: color = pixels.Color(128, 128, 128); break;
-                        }
-                    }
-                    pixels.setPixelColor(stripeCount - 1, color);
-                    pixels.show();
-                    state = PAUSING_STRIPE;
-                    prevMillis = currentMillis;
-                    
-                    if (stripeCount == 7) {
-                        phase = 3; // Chuyển sang chờ vạch đích
+                else
+                { // Chiều màu Cam
+                    switch (stripeCount)
+                    {
+                    case 1:
+                        color = pixels.Color(255, 80, 0);
+                        break;
+                    case 2:
+                        color = pixels.Color(0, 255, 128);
+                        break;
+                    case 3:
+                        color = pixels.Color(0, 255, 0);
+                        break;
+                    case 4:
+                        color = pixels.Color(255, 165, 0);
+                        break;
+                    case 5:
+                        color = pixels.Color(255, 105, 180);
+                        break;
+                    case 6:
+                        color = pixels.Color(0, 128, 255);
+                        break;
+                    case 7:
+                        color = pixels.Color(128, 128, 128);
+                        break;
                     }
                 }
-            }
-            else if (phase == 3) { // CHỜ VẠCH ĐÍCH (VẠCH THỨ 8)
-                if (val == 15 && lastVal != 15) { 
-                    setMotors(0, 0); // Phanh khẩn cấp đúng trên vạch đích
-                    state = BLINKING_END;
-                    indState = IND_BLINKING_END;
-                    blinkCount = 0;
-                    ledState = true;
-                    indPrevMillis = currentMillis;
-                    for(int i = 0; i < CROSS_NUMPIXELS; i++) pixels.setPixelColor(i, pixels.Color(255, 255, 255));
-                    pixels.show();
-                    phase = 4; // Khóa chết bộ đếm
+                pixels.setPixelColor(stripeCount - 1, color);
+                pixels.show();
+                state = PAUSING_STRIPE;
+                prevMillis = currentMillis;
+
+                if (stripeCount == 7)
+                {
+                    phase = 3; // Chuyển sang chờ vạch đích
                 }
             }
-
-            if (state == RUNNING) {
-                // THUẬT TOÁN KHỞI ĐỘNG MỀM (Tăng từ 40 lên 100 trong 0.4s)
-                int current_speed = 100; 
-                unsigned long elapsed = currentMillis - startRunTime;
-                
-                if (elapsed < 400) {
-                    current_speed = map(elapsed, 0, 400, 40, 100); 
-                }
-
-                driveWithHeading(current_speed, cross_target_yaw, current_angle, pidStraight);
+        }
+        else if (phase == 3)
+        { // CHỜ VẠCH ĐÍCH (VẠCH THỨ 8)
+            if (val == 15 && lastVal != 15)
+            {
+                setMotors(0, 0); // Phanh khẩn cấp đúng trên vạch đích
+                state = BLINKING_END;
+                indState = IND_BLINKING_END;
+                blinkCount = 0;
+                ledState = true;
+                indPrevMillis = currentMillis;
+                for (int i = 0; i < CROSS_NUMPIXELS; i++)
+                    pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+                pixels.show();
+                phase = 4; // Khóa chết bộ đếm
             }
-            lastVal = val;
-            break;
+        }
+
+        if (state == RUNNING)
+        {
+            // THUẬT TOÁN KHỞI ĐỘNG MỀM (Tăng từ 40 lên 100 trong 0.4s)
+            int current_speed = 150;
+            unsigned long elapsed = currentMillis - startRunTime;
+
+            if (elapsed < 500)
+            {
+                current_speed = map(elapsed, 0, 400, 100, 150);
+            }
+
+            driveWithHeading(current_speed, cross_target_yaw, current_angle, pidStraight);
+        }
+        lastVal = val;
+        break;
     }
 }
-void modeBrokenLine(bool reset) {
-    static unsigned long lastI2C = 0; 
+void modeBrokenLine(bool reset)
+{
+    static unsigned long lastI2C = 0;
     static uint8_t lastVal = 6;
 
-    if (reset) {
-        lastI2C = 0; lastVal = 6;
+    if (reset)
+    {
+        lastI2C = 0;
+        lastVal = 6;
         return;
     }
 
     unsigned long currentMillis = millis();
-    if (currentMillis - lastI2C < 10) return;
+    if (currentMillis - lastI2C < 10)
+        return;
     lastI2C = currentMillis;
 
-    uint8_t raw_val = 0; 
+    uint8_t raw_val = 0;
     comm.I2CrequestFrom(I2C_ADDR, 1, &raw_val);
-    uint8_t val = raw_val & 0x0F;  
-    if (val == 0) val = lastVal;
-    else lastVal = val;
+    uint8_t val = raw_val & 0x0F;
+    if (val == 0)
+        val = lastVal;
+    else
+        lastVal = val;
 
-    switch (val) {
-        case 6:  setMotors(90, 90); break; 
-        case 4:  setMotors(90, 86); break; 
-        case 12: setMotors(95, 55); break; 
-        case 8:  setMotors(110, 0); break; 
-        case 2:  setMotors(86, 90); break; 
-        case 3:  setMotors(55, 95); break; 
-        case 1:  setMotors(0, 110); break; 
-        case 15: setMotors(80, 80); break; 
-        default: setMotors(90, 90); break; 
+    switch (val)
+    {
+    case 6:
+        setMotors(130, 130);
+        break;
+    case 4:
+        setMotors(130, 126);
+        break;
+    case 12:
+        setMotors(135, 95);
+        break;
+    case 8:
+        setMotors(150, 40);
+        break;
+    case 2:
+        setMotors(126, 130);
+        break;
+    case 3:
+        setMotors(95, 135);
+        break;
+    case 1:
+        setMotors(40, 150);
+        break;
+    case 15:
+        setMotors(120, 120);
+        break;
+    default:
+        setMotors(130, 130);
+        break;
     }
 }

@@ -24,6 +24,6 @@
 // Tốc độ mặc định
 #define SPEED_DEFAULT 150
 // Hệ số tốc độ toàn cục: 1.0 (100% gốc), 0.9 (giảm 10%), 0.5 (giảm một nửa)
-#define SPEED_SCALE 1
+#define SPEED_SCALE 1.1
 
 #endif
