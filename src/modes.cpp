@@ -614,14 +614,16 @@ void modeCrossroad(bool reset) {
     static int phase = 0; 
     static int dirMode = 0; 
     static bool readyToStart = false; 
-    static bool isInit = false; // Thêm cờ khởi tạo góc chuẩn
+    static bool isInit = false; 
+    static unsigned long startRunTime = 0; // THÊM BIẾN NÀY
 
     if (reset) {
         indState = IDLE; state = RUNNING; indPrevMillis = 0; blinkCount = 0;
-        ledState = false; stripeCount = 0; lastVal = 255;
+        ledState = false; stripeCount = 0; lastVal = 15;
         prevMillis = 0; lastI2C = 0; 
         phase = 0; dirMode = 0; readyToStart = false;
-        isInit = false; // Reset lại cờ khi reset mode
+        isInit = false; 
+        startRunTime = millis(); // CHỐT THỜI GIAN BẮT ĐẦU
         
         updateAngle();
         cross_target_yaw = current_angle; 
@@ -783,7 +785,15 @@ case RUNNING:
             }
 
             if (state == RUNNING) {
-                driveWithHeading(100, cross_target_yaw, current_angle, pidStraight);
+                // THUẬT TOÁN KHỞI ĐỘNG MỀM (Tăng từ 40 lên 100 trong 0.4s)
+                int current_speed = 100; 
+                unsigned long elapsed = currentMillis - startRunTime;
+                
+                if (elapsed < 400) {
+                    current_speed = map(elapsed, 0, 400, 40, 100); 
+                }
+
+                driveWithHeading(current_speed, cross_target_yaw, current_angle, pidStraight);
             }
             lastVal = val;
             break;

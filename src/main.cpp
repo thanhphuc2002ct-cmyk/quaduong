@@ -74,18 +74,26 @@ if (btnPressed) {
         if (digitalRead(BUTTON_PIN) == LOW) {
             unsigned long startH = millis();
             bool isLong = false;
+            bool isCalib = false; // Thêm cờ nhận diện đè 10s
             
             while (digitalRead(BUTTON_PIN) == LOW) {
                 extern void updateAngle();
                 updateAngle(); 
-                if (millis() - startH >= 2000) { isLong = true; break; }
+                unsigned long heldTime = millis() - startH;
+                
+                if (heldTime >= 1000) { 
+                    isLong = true;  // Đè qua 1s thì bật cờ chạy
+                }
                 delay(10);
             }
             
-            if (isLong) { // NẾU ĐÈ 2 GIÂY -> BẬT CỜ CHẠY
+            if (isLong) { 
                 Serial.println("[BUTTON] DA DE 2S -> BAT DAU CHAY MODE HIEN TAI!");
                 extern void triggerStartSequence();
                 triggerStartSequence(); 
+                
+                while(digitalRead(BUTTON_PIN) == LOW) { delay(10); } // Chờ nhả nút
+                delay(1000); // Thêm 1 giây delay để tay bạn rời hẳn khỏi xe, xe không bị rung lệch góc
                 
                 if (currentMode == MODE_MAZE) modeMazeSolver(true);
                 else if (currentMode == MODE_OBSTACLE) modeObstacleAvoidance(true);
@@ -95,7 +103,6 @@ if (btnPressed) {
                 else if (currentMode == MODE_REMOTE) modeRemoteControl(true);
 
                 isRunning = true; 
-                while(digitalRead(BUTTON_PIN) == LOW) { delay(10); } 
             } 
             else { 
                 isRunning = false; 

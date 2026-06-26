@@ -7,7 +7,7 @@ void setMotors(int speedLeft, int speedRight) {
     speedLeft = speedLeft * SPEED_SCALE;
     speedRight = speedRight * SPEED_SCALE;
 
-if (speedLeft > 0) { speedLeft -= 0; if (speedLeft < 0) speedLeft = 0; }
+    if (speedLeft > 0) { speedLeft -= 0; if (speedLeft < 0) speedLeft = 0; }
     else if (speedLeft < 0) { speedLeft += 0; if (speedLeft > 0) speedLeft = 0; }
 
     speedLeft = constrain(speedLeft, -255, 255);

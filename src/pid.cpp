@@ -5,7 +5,8 @@
 // PIDConfig pidStraight = {2.5, 0.01, 0.1, 0, 0};  
 // PIDConfig pidTurn     = {1.5, 0.04, 0.06, 0, 0};    
 
-PIDConfig pidStraight = {0.6, 0.0, 0.15, 0, 0};
+PIDConfig pidStraight = {0.6, 0.02, 0.15, 0, 0};
+// PIDConfig pidStraight = {0.7, 0.15, 0.2, 0, 0};
 PIDConfig pidTurn     = {1.5, 0.02, 0.15, 0, 0};
 
 void driveWithHeading(int base_speed, float target, float current, PIDConfig &pid) {
