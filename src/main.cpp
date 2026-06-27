@@ -38,6 +38,21 @@ void IRAM_ATTR buttonISR()
     }
 }
 
+TaskHandle_t blinkTaskHandle = NULL;
+
+void loadingBlinkTask(void *pvParameters)
+{
+    extern void setAllLEDs(uint8_t r, uint8_t g, uint8_t b);
+    bool state = false;
+    while (true)
+    {
+        if (state) setAllLEDs(255, 0, 0);
+        else setAllLEDs(0, 0, 0);
+        state = !state;
+        vTaskDelay(pdMS_TO_TICKS(250)); // Nháy chớp tắt mỗi 250ms
+    }
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -45,14 +60,40 @@ void setup()
     pinMode(TRIG_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+
+    comm.beginUART(Serial1, 41, 42, 115200);
+    periph.Periph_Initialize(IR | servo, INIT); 
+
+    extern void initCrossroadLED();
+    extern void setAllLEDs(uint8_t r, uint8_t g, uint8_t b); 
+    
+    initCrossroadLED(); 
+
+    // 1. Chạy một luồng (Task) ngầm độc lập để nháy đỏ liên tục
+    xTaskCreate(loadingBlinkTask, "BlinkTask", 2048, NULL, 1, &blinkTaskHandle);
+
+    // 2. Chạy các lệnh khởi tạo nặng (chiếm thời gian chờ)
     comm.beginI2C(SDA_PIN, SCL_PIN);
     motorInit();
     Init_MPU(MPU_SDA_PIN, MPU_SCL_PIN);
-    comm.beginUART(Serial1, 41, 42, 115200);
-    periph.Periph_Initialize(IR | servo, INIT);
-    extern void initCrossroadLED();
-    initCrossroadLED();
-    Serial.println("[SYSTEM] He thong khoi dong. Cho lenh tu remote IR...");
+
+    // 3. Khi khởi tạo hoàn tất -> Xóa bỏ luồng nháy đỏ đi
+    if (blinkTaskHandle != NULL) {
+        vTaskDelete(blinkTaskHandle);
+    }
+
+    // 4. Nháy xanh lá 3 lần báo hiệu khởi động và calib MPU thành công
+    for (int i = 0; i < 3; i++) {
+        setAllLEDs(0, 255, 0); 
+        delay(150);
+        setAllLEDs(0, 0, 0);   
+        delay(150);
+    }
+
+    extern void displayModeLED(int modeNum);
+    displayModeLED(1);
+
+    Serial.println("[SYSTEM] He thong khoi dong thanh cong. Cho lenh tu remote IR...");
 }
 
 void loop()
@@ -133,9 +174,10 @@ if (btnPressed)
                 if (currentMode == MODE_IDLE)
                 {
                     currentMode = MODE_CROSSROAD;
+                    displayModeLED(2);       
+                    delay(500);              
                     modeCrossroad(true);
-                    triggerStartSequence();
-                    displayModeLED(1);
+                    triggerStartSequence();  
                     Serial.println("[BUTTON] CHUYEN MODE: QUA DUONG (CROSSROAD)");
                     isRunning = true;
                 }
@@ -144,34 +186,23 @@ if (btnPressed)
                     currentMode = MODE_OBSTACLE;
                     modeObstacleAvoidance(true);
                     triggerStartSequence();
-                    displayModeLED(2);
+                    displayModeLED(3);
                     Serial.println("[BUTTON] CHUYEN MODE: NE VAT CAN (OBSTACLE)");
                     isRunning = true;
                 }
                 else if (currentMode == MODE_OBSTACLE)
                 {
-                    currentMode = MODE_BROKEN_LINE;
-                    modeBrokenLine(true);
-                    triggerStartSequence();
-                    displayModeLED(3);
-                    Serial.println("[BUTTON] CHUYEN MODE: LINE DUT QUANG (BROKEN LINE)");
-                    isRunning = true;
-                }
-#if 1
-                else if (currentMode == MODE_BROKEN_LINE)
-                {
                     currentMode = MODE_MAZE;
                     modeMazeSolver(true);
                     triggerStartSequence();
-                    displayModeLED(4);
+                    displayModeLED(4); // Đổi thành LED 4 tương ứng với vị trí mới của Mode Mê Cung
                     Serial.println("[BUTTON] CHUYEN MODE: GIAI MA ME CUNG (MAZE SOLVER)");
                     isRunning = true;
                 }
-#endif
                 else
                 {
                     currentMode = MODE_IDLE;
-                    displayModeLED(0);
+                    displayModeLED(1);
                     Serial.println("[BUTTON] CHUYEN MODE: DUNG YEN (IDLE)");
                     isRunning = false;
                 }

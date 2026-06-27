@@ -235,7 +235,8 @@ void modeMazeSolver(bool reset)
         break;
 
     case FOLLOW_LINE:
-        if (val == 15 || val == 14 || val == 13 || val == 11 || val == 7)
+        // Đếm số bit 1. Nếu >= 3 nghĩa là có từ 3 mắt trở lên chạm line (chống nhiễu mất 1 mắt)
+        if (__builtin_popcount(val) >= 3)
         {
             currentState = PUSH_THROUGH;
             actionStartTime = millis();
@@ -251,7 +252,6 @@ void modeMazeSolver(bool reset)
             case 2: setMotors(116, 120); break;
             case 3: setMotors(85, 125); break;
             case 1: setMotors(30, 140); break;
-            case 15: driveWithHeading(110, current_target_yaw, current_angle, pidStraight); break;
             case 0: driveWithHeading(110, current_target_yaw, current_angle, pidStraight); break;
             default: driveWithHeading(120, current_target_yaw, current_angle, pidStraight); break;
             }
@@ -794,11 +794,14 @@ void modeObstacleAvoidance(bool reset)
     {
         FOLLOW,
         TURN_AROUND_FIND_ZERO,
-        TURN_AROUND_FIND_LINE
+        TURN_AROUND_FIND_LINE,
+        TURN_BACK_180
     };
     static ObstacleState state = FOLLOW;
     static unsigned long lastI2C = 0;
     static uint8_t lastVal = 6;
+    static float initial_yaw = 0.0;
+    static bool isInit = false;
     extern long current_distance;
 
     if (reset)
@@ -806,20 +809,31 @@ void modeObstacleAvoidance(bool reset)
         state = FOLLOW;
         lastI2C = 0;
         lastVal = 6;
+        initial_yaw = 0.0;
+        isInit = false;
         return;
     }
 
+    if (!isInit)
+    {
+        updateAngle();
+        isInit = true;
+    }
+
+    updateAngle(); // Liên tục cập nhật MPU để đo xem xe đã xoay bao nhiêu độ
     unsigned long currentMillis = millis();
 
     if (state == FOLLOW && current_distance > 0 && current_distance <= 7)
     {
         setMotors(0, 0);
         delay(200);
+        initial_yaw = current_angle; // Lưu lại góc ban đầu ngay khi gặp vật cản
         state = TURN_AROUND_FIND_ZERO;
         return;
     }
 
-    if (currentMillis - lastI2C < 10)
+    // Bỏ qua thời gian đợi I2C nếu đang ở pha bẻ góc bằng PID
+    if (state != TURN_BACK_180 && currentMillis - lastI2C < 10)
         return;
     lastI2C = currentMillis;
 
@@ -834,6 +848,14 @@ void modeObstacleAvoidance(bool reset)
         {
             state = TURN_AROUND_FIND_LINE;
         }
+        // Đề phòng lỗi xoay vòng vô tận ngay từ pha tìm nền trắng
+        if (abs(current_angle - initial_yaw) > 720.0)
+        {
+            setMotors(0, 0);
+            delay(100);
+            initial_yaw = normalizeAngle(initial_yaw + 180.0);
+            state = TURN_BACK_180;
+        }
         return;
     }
     else if (state == TURN_AROUND_FIND_LINE)
@@ -845,6 +867,30 @@ void modeObstacleAvoidance(bool reset)
             delay(100);
             lastVal = val;
             state = FOLLOW;
+        }
+        // NẾU QUAY QUÁ 2 VÒNG (720 ĐỘ) MÀ VẪN KHÔNG THẤY LINE
+        else if (abs(current_angle - initial_yaw) > 720.0) 
+        {
+            setMotors(0, 0);
+            delay(100);
+            // Thiết lập mục tiêu là góc ngược lại 180 độ so với lúc gặp vật cản
+            initial_yaw = normalizeAngle(initial_yaw + 180.0); 
+            state = TURN_BACK_180;
+        }
+        return;
+    }
+    else if (state == TURN_BACK_180)
+    {
+        float error_val = calculateAngleError(initial_yaw, current_angle);
+        if (abs(error_val) < 3.0)
+        {
+            setMotors(0, 0);
+            delay(100);
+            state = FOLLOW; // Quay lưng đúng 180 độ xong thì tiếp tục trạng thái bám line
+        }
+        else
+        {
+            driveWithHeading(0, initial_yaw, current_angle, pidTurn); // Sử dụng PID để ép góc xoay mượt mà
         }
         return;
     }
@@ -1157,6 +1203,15 @@ void clearLEDs()
     pixels.show();
 }
 
+void setAllLEDs(uint8_t r, uint8_t g, uint8_t b)
+{
+    for (int i = 0; i < CROSS_NUMPIXELS; i++)
+    {
+        pixels.setPixelColor(i, pixels.Color(r, g, b));
+    }
+    pixels.show();
+}
+
 void triggerModeChangeSequence()
 {
     for (int i = 0; i < 8; i++)
@@ -1408,15 +1463,15 @@ void modeCrossroad(bool reset)
             {
                 readyToStart = true;
             }
-            // Nếu đã bắt được vạch giữa trước đó, và giờ đạp lên full line (15)
-            if (readyToStart && val == 15 && lastVal != 15)
+            // Nếu đã bắt được vạch giữa trước đó, và giờ đạp lên full line (từ 3 mắt trở lên)
+            if (readyToStart && __builtin_popcount(val) >= 3 && __builtin_popcount(lastVal) < 3)
             {
                 phase = 1; // Bắt đầu vào vạch xuất phát, nhưng KHÔNG tăng stripeCount
             }
         }
         else if (phase == 1)
         { // RỜI VẠCH XUẤT PHÁT ĐỂ XÁC ĐỊNH CHIỀU
-            if (val != 15)
+            if (__builtin_popcount(val) < 3)
             { // Xe vừa trượt khỏi vạch full line đầu tiên
                 if (val == 0)
                 {
@@ -1434,7 +1489,7 @@ void modeCrossroad(bool reset)
         }
         else if (phase == 2)
         { // ĐẾM 7 VẠCH
-            if (val == 15 && readyToCountStripe)
+            if (__builtin_popcount(val) >= 3 && readyToCountStripe)
             {
                 readyToCountStripe = false;
                 zeroCount = 0;
@@ -1509,7 +1564,7 @@ void modeCrossroad(bool reset)
         }
         else if (phase == 3)
         { // CHỜ VẠCH ĐÍCH (VẠCH THỨ 8)
-            if (val == 15 && readyToCountStripe)
+            if (__builtin_popcount(val) >= 3 && readyToCountStripe)
             {
                 readyToCountStripe = false;
                 zeroCount = 0;
